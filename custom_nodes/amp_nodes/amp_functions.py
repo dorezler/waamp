@@ -8,6 +8,9 @@ import pandas as pd
 
 logger = logging.getLogger(__name__)
 
+# Standardowe aminokwasy (20 naturalnych, tylko wielkie litery)
+STANDARD_AMINO_ACIDS = "ACDEFGHIKLMNPQRSTVWY"
+
 
 def drop_na_in_column(dataframe: pd.DataFrame, column_name: str) -> pd.DataFrame:
     """Usuwa wiersze z pustymi wartościami w wybranej kolumnie."""
@@ -26,6 +29,27 @@ def drop_na_in_column(dataframe: pd.DataFrame, column_name: str) -> pd.DataFrame
     logger.info("Dropped NA values in column '%s'.", column_name)
     logger.info("Rows before: %d, after: %d.", len(dataframe), len(cleaned_df))
     return cleaned_df
+
+
+def filter_standard_amino_acids(dataframe: pd.DataFrame, column_name: str) -> pd.DataFrame:
+    """Usuwa wiersze zawierające niestandardowe aminokwasy (x, X, małe litery)."""
+    column_name = column_name.strip()
+    # Walidacja: sprawdź czy column_name nie jest pusty
+    if not column_name:
+        raise ValueError("No column name provided. Please specify a column name to filter standard amino acids.")
+    # Walidacja: sprawdź czy kolumna istnieje
+    if column_name not in dataframe.columns:
+        raise ValueError(
+            f"Column '{column_name}' not found in DataFrame. Available columns: {list(dataframe.columns)}."
+        )
+    # Filtruj tylko standardowe aminokwasy
+    pattern = re.compile(f"^[{STANDARD_AMINO_ACIDS}]+$")
+    mask = dataframe[column_name].astype(str).str.match(pattern, na=False)
+    filtered_df = dataframe[mask].copy()
+    # Przygotuj info do logów
+    logger.info("Filtered standard amino acids in column '%s'.", column_name)
+    logger.info("Rows before: %d, after: %d.", len(dataframe), len(filtered_df))
+    return filtered_df
 
 
 def filter_column_by_regex(dataframe: pd.DataFrame, column_name: str, pattern: str) -> pd.DataFrame:

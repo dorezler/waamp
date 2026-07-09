@@ -5,7 +5,13 @@ from pathlib import Path
 
 import pandas as pd
 
-from .amp_functions import drop_na_in_column, filter_column_by_regex, load_csv_file, save_csv_file
+from .amp_functions import (
+    drop_na_in_column,
+    filter_column_by_regex,
+    filter_standard_amino_acids,
+    load_csv_file,
+    save_csv_file,
+)
 
 
 class DropNANode:
@@ -56,6 +62,31 @@ class FilterByRegexNode:
     def filter_by_regex(self, dataframe: pd.DataFrame, column_name: str, pattern: str) -> tuple[pd.DataFrame]:
         """Filtruje wiersze DataFrame po zawartości kolumny z użyciem wyrażenia regularnego."""
         filtered_df = filter_column_by_regex(dataframe, column_name, pattern)
+        return (filtered_df,)
+
+
+class FilterStandardAminoAcidsNode:
+    """Węzeł do filtrowania standardowych aminokwasów."""
+
+    # Stałe klasowe definiujące interfejs węzła
+    RETURN_TYPES = ("DATAFRAME",)  # Zwraca DataFrame
+    RETURN_NAMES = ("dataframe",)  # Nazwa outputu
+    FUNCTION = "filter_standard_amino_acids"  # Nazwa funkcji do wywołania
+    CATEGORY = "AMP Research/Data Processing"  # Kategoria w menu ComfyUI
+
+    @classmethod
+    def INPUT_TYPES(cls) -> dict:  # pylint: disable=invalid-name
+        """Definiuje typy wejściowe dla węzła."""
+        return {
+            "required": {
+                "dataframe": ("DATAFRAME",),  # DataFrame do filtrowania
+                "column_name": ("STRING", {}),  # Nazwa kolumny
+            },
+        }
+
+    def filter_standard_amino_acids(self, dataframe: pd.DataFrame, column_name: str) -> tuple[pd.DataFrame]:
+        """Filtruje wiersze zawierające tylko standardowe aminokwasy."""
+        filtered_df = filter_standard_amino_acids(dataframe, column_name)
         return (filtered_df,)
 
 
@@ -133,6 +164,7 @@ class SaveCSVNode:
 NODE_CLASS_MAPPINGS = {
     "LoadCSVNode": LoadCSVNode,
     "FilterByRegexNode": FilterByRegexNode,
+    "FilterStandardAminoAcidsNode": FilterStandardAminoAcidsNode,
     "DropNANode": DropNANode,
     "SaveCSVNode": SaveCSVNode,
 }
@@ -141,6 +173,7 @@ NODE_CLASS_MAPPINGS = {
 NODE_DISPLAY_NAME_MAPPINGS = {
     "LoadCSVNode": "Load CSV Data",
     "FilterByRegexNode": "Filter by Regex",
+    "FilterStandardAminoAcidsNode": "Filter Standard Amino Acids",
     "DropNANode": "Drop NA Values",
     "SaveCSVNode": "Save CSV Data",
 }
