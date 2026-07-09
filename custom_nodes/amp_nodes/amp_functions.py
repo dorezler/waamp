@@ -35,7 +35,7 @@ AMINO_ACID_WEIGHTS = {
 STANDARD_AMINO_ACIDS = "ACDEFGHIKLMNPQRSTVWY"
 
 
-def _apply_range_strategy(num1: float, num2: float, strategy: str, decimal_places: int) -> float:
+def _apply_range_strategy(num1: float, num2: float, strategy: str) -> float:
     """Zastosuj strategię do zakresu wartości."""
     strategy_map = {
         "min": min(num1, num2),
@@ -43,7 +43,7 @@ def _apply_range_strategy(num1: float, num2: float, strategy: str, decimal_place
         "mean": (num1 + num2) / 2,
         "median": (num1 + num2) / 2,
     }
-    return round(strategy_map[strategy], decimal_places)
+    return strategy_map[strategy]
 
 
 def _calculate_molecular_weight(sequence: str) -> float:
@@ -91,7 +91,7 @@ def _convert_unit_for_row(current_unit: str, activity: float, mw: float, target_
     return activity
 
 
-def _parse_activity_value(value: str, range_strategy: str, decimal_places: int) -> float | None:
+def _parse_activity_value(value: str, range_strategy: str) -> float | None:
     """Parsuje pojedynczą wartość Activity do float."""
     if pd.isna(value):
         return None
@@ -109,21 +109,19 @@ def _parse_activity_value(value: str, range_strategy: str, decimal_places: int) 
         if "-" in value and not value.startswith("-"):
             parts = re.split(r"->|-", value)
             if len(parts) == 2:
-                return _apply_range_strategy(float(parts[0]), float(parts[1]), range_strategy, decimal_places)
+                return _apply_range_strategy(float(parts[0]), float(parts[1]), range_strategy)
         # Obsługa zakresów: x+/-y, x±y -> x
         if any(op in value for op in ["+/-", "+-", "±"]):
             match = re.match(r"^([\d.]+)", value)
             if match:
-                return round(float(match.group(1)), decimal_places)
+                return float(match.group(1))
         # Konwersja bezpośrednia
-        return round(float(value), decimal_places)
+        return float(value)
     except ValueError:
         return None
 
 
-def clean_activity_values(
-    dataframe: pd.DataFrame, column_name: str, range_strategy: str = "mean", decimal_places: int = 2
-) -> pd.DataFrame:
+def clean_activity_values(dataframe: pd.DataFrame, column_name: str, range_strategy: str = "mean") -> pd.DataFrame:
     """Czyści kolumnę Activity - obsługuje zakresy, nierówności, konwertuje do float."""
     column_name = column_name.strip()
     # Walidacja: sprawdź czy column_name nie jest pusty
@@ -140,9 +138,7 @@ def clean_activity_values(
         raise ValueError(f"Invalid range_strategy: {range_strategy}. Must be one of {valid_strategies}.")
     # Zastosuj funkcję czyszczącą
     cleaned_df = dataframe.copy()
-    cleaned_df[column_name] = cleaned_df[column_name].apply(
-        lambda x: _parse_activity_value(x, range_strategy, decimal_places)
-    )
+    cleaned_df[column_name] = cleaned_df[column_name].apply(lambda x: _parse_activity_value(x, range_strategy))
     # Przygotuj info do logów
     logger.info("Cleaned activity values in column '%s' with strategy '%s'.", column_name, range_strategy)
     logger.info("Rows before: %d, after: %d.", len(dataframe), len(cleaned_df))
@@ -278,6 +274,29 @@ def load_csv_file(csv_path: str) -> pd.DataFrame:
     logger.info("Loaded CSV file: %s.", csv_path)
     logger.info("Shape: %s, Columns: %s.", df.shape, list(df.columns))
     return df
+
+
+def round_column_values(dataframe: pd.DataFrame, column_name: str, decimal_places: int = 2) -> pd.DataFrame:
+    """Zaokrągla wartości numeryczne w kolumnie do określonej liczby miejsc po przecinku."""
+    column_name = column_name.strip()
+    # Walidacja: sprawdź czy column_name nie jest pusty
+    if not column_name:
+        raise ValueError("No column name provided. Please specify a column name to round values.")
+    # Walidacja: sprawdź czy kolumna istnieje
+    if column_name not in dataframe.columns:
+        raise ValueError(
+            f"Column '{column_name}' not found in DataFrame. Available columns: {list(dataframe.columns)}."
+        )
+    # Walidacja: sprawdź decimal_places
+    if decimal_places < 0:
+        raise ValueError(f"Invalid decimal_places: {decimal_places}. Must be >= 0.")
+    # Zaokrąglij wartości
+    rounded_df = dataframe.copy()
+    rounded_df[column_name] = rounded_df[column_name].apply(lambda x: round(x, decimal_places) if pd.notna(x) else x)
+    # Przygotuj info do logów
+    logger.info("Rounded values in column '%s' to %d decimal places.", column_name, decimal_places)
+    logger.info("Rows: %d.", len(rounded_df))
+    return rounded_df
 
 
 def save_csv_file(

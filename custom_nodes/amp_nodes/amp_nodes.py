@@ -12,6 +12,7 @@ from .amp_functions import (
     filter_column_by_regex,
     filter_standard_amino_acids,
     load_csv_file,
+    round_column_values,
     save_csv_file,
 )
 
@@ -33,15 +34,12 @@ class CleanActivityValuesNode:
                 "dataframe": ("DATAFRAME",),  # DataFrame do czyszczenia
                 "column_name": ("STRING", {}),  # Nazwa kolumny
                 "range_strategy": (["mean", "min", "max", "median"], {"default": "mean"}),  # Strategia dla zakresów
-                "decimal_places": ("INT", {"default": 2, "min": 0, "max": 10}),  # Miejsca po przecinku
             },
         }
 
-    def clean_activity(
-        self, dataframe: pd.DataFrame, column_name: str, range_strategy: str, decimal_places: int
-    ) -> tuple[pd.DataFrame]:
+    def clean_activity(self, dataframe: pd.DataFrame, column_name: str, range_strategy: str) -> tuple[pd.DataFrame]:
         """Czyści kolumnę Activity - obsługuje zakresy, nierówności, konwertuje do float."""
-        cleaned_df = clean_activity_values(dataframe, column_name, range_strategy, decimal_places)
+        cleaned_df = clean_activity_values(dataframe, column_name, range_strategy)
         return (cleaned_df,)
 
 
@@ -197,6 +195,32 @@ class LoadCSVNode:
         return (df,)
 
 
+class RoundValuesNode:
+    """Węzeł do zaokrąglania wartości numerycznych w kolumnie."""
+
+    # Stałe klasowe definiujące interfejs węzła
+    RETURN_TYPES = ("DATAFRAME",)  # Zwraca DataFrame
+    RETURN_NAMES = ("dataframe",)  # Nazwa outputu
+    FUNCTION = "round_values"  # Nazwa funkcji do wywołania
+    CATEGORY = "AMP Research/Data Processing"  # Kategoria w menu ComfyUI
+
+    @classmethod
+    def INPUT_TYPES(cls) -> dict:  # pylint: disable=invalid-name
+        """Definiuje typy wejściowe dla węzła."""
+        return {
+            "required": {
+                "dataframe": ("DATAFRAME",),  # DataFrame do zaokrąglenia
+                "column_name": ("STRING", {}),  # Nazwa kolumny
+                "decimal_places": ("INT", {"default": 2, "min": 0, "max": 10}),  # Miejsca po przecinku
+            },
+        }
+
+    def round_values(self, dataframe: pd.DataFrame, column_name: str, decimal_places: int) -> tuple[pd.DataFrame]:
+        """Zaokrągla wartości numeryczne w kolumnie do określonej liczby miejsc po przecinku."""
+        rounded_df = round_column_values(dataframe, column_name, decimal_places)
+        return (rounded_df,)
+
+
 class SaveCSVNode:
     """Węzeł do zapisywania DataFrame do pliku CSV."""
 
@@ -234,6 +258,7 @@ NODE_CLASS_MAPPINGS = {
     "DropNANode": DropNANode,
     "CleanActivityValuesNode": CleanActivityValuesNode,
     "ConvertUnitsNode": ConvertUnitsNode,
+    "RoundValuesNode": RoundValuesNode,
     "SaveCSVNode": SaveCSVNode,
 }
 
@@ -245,5 +270,6 @@ NODE_DISPLAY_NAME_MAPPINGS = {
     "DropNANode": "Drop NA Values",
     "CleanActivityValuesNode": "Clean Activity Values",
     "ConvertUnitsNode": "Convert Activity Units",
+    "RoundValuesNode": "Round Values",
     "SaveCSVNode": "Save CSV Data",
 }
