@@ -5,7 +5,32 @@ from pathlib import Path
 
 import pandas as pd
 
-from .amp_functions import filter_column_by_regex, load_csv_file, save_csv_file
+from .amp_functions import drop_na_in_column, filter_column_by_regex, load_csv_file, save_csv_file
+
+
+class DropNANode:
+    """Węzeł do usuwania wierszy z pustymi wartościami w kolumnie."""
+
+    # Stałe klasowe definiujące interfejs węzła
+    RETURN_TYPES = ("DATAFRAME",)  # Zwraca DataFrame
+    RETURN_NAMES = ("dataframe",)  # Nazwa outputu
+    FUNCTION = "drop_na"  # Nazwa funkcji do wywołania
+    CATEGORY = "AMP Research/Data Processing"  # Kategoria w menu ComfyUI
+
+    @classmethod
+    def INPUT_TYPES(cls) -> dict:  # pylint: disable=invalid-name
+        """Definiuje typy wejściowe dla węzła."""
+        return {
+            "required": {
+                "dataframe": ("DATAFRAME",),  # DataFrame do czyszczenia
+                "column_name": ("STRING", {}),  # Nazwa kolumny
+            },
+        }
+
+    def drop_na(self, dataframe: pd.DataFrame, column_name: str) -> tuple[pd.DataFrame]:
+        """Usuwa wiersze z pustymi wartościami w wybranej kolumnie."""
+        cleaned_df = drop_na_in_column(dataframe, column_name)
+        return (cleaned_df,)
 
 
 class FilterByRegexNode:
@@ -108,6 +133,7 @@ class SaveCSVNode:
 NODE_CLASS_MAPPINGS = {
     "LoadCSVNode": LoadCSVNode,
     "FilterByRegexNode": FilterByRegexNode,
+    "DropNANode": DropNANode,
     "SaveCSVNode": SaveCSVNode,
 }
 
@@ -115,5 +141,6 @@ NODE_CLASS_MAPPINGS = {
 NODE_DISPLAY_NAME_MAPPINGS = {
     "LoadCSVNode": "Load CSV Data",
     "FilterByRegexNode": "Filter by Regex",
+    "DropNANode": "Drop NA Values",
     "SaveCSVNode": "Save CSV Data",
 }

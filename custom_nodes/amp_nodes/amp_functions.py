@@ -9,6 +9,25 @@ import pandas as pd
 logger = logging.getLogger(__name__)
 
 
+def drop_na_in_column(dataframe: pd.DataFrame, column_name: str) -> pd.DataFrame:
+    """Usuwa wiersze z pustymi wartościami w wybranej kolumnie."""
+    column_name = column_name.strip()
+    # Walidacja: sprawdź czy column_name nie jest pusty
+    if not column_name:
+        raise ValueError("No column name provided. Please specify a column name to drop NA values from.")
+    # Walidacja: sprawdź czy kolumna istnieje
+    if column_name not in dataframe.columns:
+        raise ValueError(
+            f"Column '{column_name}' not found in DataFrame. Available columns: {list(dataframe.columns)}."
+        )
+    # Usuń wiersze z NA w kolumnie
+    cleaned_df = dataframe.dropna(subset=column_name).copy()
+    # Przygotuj info do logów
+    logger.info("Dropped NA values in column '%s'.", column_name)
+    logger.info("Rows before: %d, after: %d.", len(dataframe), len(cleaned_df))
+    return cleaned_df
+
+
 def filter_column_by_regex(dataframe: pd.DataFrame, column_name: str, pattern: str) -> pd.DataFrame:
     """Filtruje wiersze DataFrame po zawartości kolumny z użyciem wyrażenia regularnego."""
     pattern = pattern.strip()
