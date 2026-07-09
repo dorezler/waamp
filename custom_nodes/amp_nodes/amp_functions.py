@@ -121,6 +121,36 @@ def _parse_activity_value(value: str, range_strategy: str) -> float | None:
         return None
 
 
+def aggregate_duplicates(dataframe: pd.DataFrame, key_column: str, strategy: str = "mean") -> pd.DataFrame:
+    """Agreguje duplikaty w DataFrame na podstawie kolumny klucza.
+
+    Args:
+        dataframe: DataFrame do agregacji (zakłada kolumny numeryczne poza key_column)
+        key_column: Nazwa kolumny klucza (np. "Peptide Sequence")
+        strategy: Strategia agregacji: "min", "max", "mean", "median", "first"
+
+    Returns:
+        DataFrame z zagregowanymi duplikatami
+    """
+    key_column = key_column.strip()
+    # Walidacja: sprawdź czy key_column nie jest pusty
+    if not key_column:
+        raise ValueError("No key column provided. Please specify a key column for aggregation.")
+    # Walidacja: sprawdź czy kolumna istnieje
+    if key_column not in dataframe.columns:
+        raise ValueError(f"Column '{key_column}' not found in DataFrame. Available columns: {list(dataframe.columns)}.")
+    # Walidacja: sprawdź strategię
+    valid_strategies = ["min", "max", "mean", "median", "first"]
+    if strategy not in valid_strategies:
+        raise ValueError(f"Invalid strategy: {strategy}. Must be one of {valid_strategies}.")
+    # Agreguj duplikaty
+    aggregated_df = dataframe.groupby(key_column, as_index=False).agg(strategy)
+    # Przygotuj info do logów
+    logger.info("Aggregated duplicates by column '%s' with strategy '%s'.", key_column, strategy)
+    logger.info("Rows before: %d, after: %d.", len(dataframe), len(aggregated_df))
+    return aggregated_df
+
+
 def clean_activity_values(dataframe: pd.DataFrame, column_name: str, range_strategy: str = "mean") -> pd.DataFrame:
     """Czyści kolumnę Activity - obsługuje zakresy, nierówności, konwertuje do float."""
     column_name = column_name.strip()

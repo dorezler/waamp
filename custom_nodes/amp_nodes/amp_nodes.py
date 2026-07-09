@@ -7,6 +7,7 @@ from pathlib import Path
 import pandas as pd
 
 from .amp_functions import (
+    aggregate_duplicates,
     clean_activity_values,
     convert_units,
     drop_na_in_column,
@@ -17,6 +18,32 @@ from .amp_functions import (
     save_csv_file,
     select_columns,
 )
+
+
+class AggregateDuplicatesNode:
+    """Węzeł do agregacji duplikatów na podstawie kolumny klucza."""
+
+    # Stałe klasowe definiujące interfejs węzła
+    RETURN_TYPES = ("DATAFRAME",)  # Zwraca DataFrame
+    RETURN_NAMES = ("dataframe",)  # Nazwa outputu
+    FUNCTION = "aggregate_duplicates"  # Nazwa funkcji do wywołania
+    CATEGORY = "AMP Research/Data Processing"  # Kategoria w menu ComfyUI
+
+    @classmethod
+    def INPUT_TYPES(cls) -> dict:  # pylint: disable=invalid-name
+        """Definiuje typy wejściowe dla węzła."""
+        return {
+            "required": {
+                "dataframe": ("DATAFRAME",),  # DataFrame do agregacji
+                "key_column": ("STRING", {}),  # Kolumna klucza
+                "strategy": (["mean", "min", "max", "median", "first"], {"default": "mean"}),  # Strategia agregacji
+            },
+        }
+
+    def aggregate_duplicates(self, dataframe: pd.DataFrame, key_column: str, strategy: str) -> tuple[pd.DataFrame]:
+        """Agreguje duplikaty w DataFrame na podstawie kolumny klucza."""
+        aggregated_df = aggregate_duplicates(dataframe, key_column, strategy)
+        return (aggregated_df,)
 
 
 class CleanActivityValuesNode:
@@ -288,6 +315,7 @@ NODE_CLASS_MAPPINGS = {
     "ConvertUnitsNode": ConvertUnitsNode,
     "RoundValuesNode": RoundValuesNode,
     "SelectColumnsNode": SelectColumnsNode,
+    "AggregateDuplicatesNode": AggregateDuplicatesNode,
     "SaveCSVNode": SaveCSVNode,
 }
 
@@ -301,5 +329,6 @@ NODE_DISPLAY_NAME_MAPPINGS = {
     "ConvertUnitsNode": "Convert Activity Units",
     "RoundValuesNode": "Round Values",
     "SelectColumnsNode": "Select Columns",
+    "AggregateDuplicatesNode": "Aggregate Duplicates",
     "SaveCSVNode": "Save CSV Data",
 }
