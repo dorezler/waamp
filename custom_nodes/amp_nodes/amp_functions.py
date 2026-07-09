@@ -12,6 +12,75 @@ logger = logging.getLogger(__name__)
 STANDARD_AMINO_ACIDS = "ACDEFGHIKLMNPQRSTVWY"
 
 
+def _apply_range_strategy(num1: float, num2: float, strategy: str, decimal_places: int) -> float:
+    """Zastosuj strategię do zakresu wartości."""
+    strategy_map = {
+        "min": min(num1, num2),
+        "max": max(num1, num2),
+        "mean": (num1 + num2) / 2,
+        "median": (num1 + num2) / 2,
+    }
+    return round(strategy_map[strategy], decimal_places)
+
+
+def _parse_activity_value(value: str, range_strategy: str, decimal_places: int) -> float | None:
+    """Parsuje pojedynczą wartość Activity do float."""
+    if pd.isna(value):
+        return None
+    value = str(value).strip()
+    # Usuń spacje i normalizuj myślniki
+    value = value.replace(" ", "").replace("–", "-").replace("—", "-")
+    # Obsługa jawnego "NA"
+    if value.upper() == "NA":
+        return None
+    # Obsługa nierówności: >x, <x, >=x, <=x -> x (usuń operator, zostaw wartość/zakres)
+    if value.startswith((">", "<")):
+        value = re.sub(r"^[><]=?", "", value)
+    try:
+        # Obsługa zakresów: x-y lub x->y
+        if "-" in value and not value.startswith("-"):
+            parts = re.split(r"->|-", value)
+            if len(parts) == 2:
+                return _apply_range_strategy(float(parts[0]), float(parts[1]), range_strategy, decimal_places)
+        # Obsługa zakresów: x+/-y, x±y -> x
+        if any(op in value for op in ["+/-", "+-", "±"]):
+            match = re.match(r"^([\d.]+)", value)
+            if match:
+                return round(float(match.group(1)), decimal_places)
+        # Konwersja bezpośrednia
+        return round(float(value), decimal_places)
+    except ValueError:
+        return None
+
+
+def clean_activity_values(
+    dataframe: pd.DataFrame, column_name: str, range_strategy: str = "mean", decimal_places: int = 2
+) -> pd.DataFrame:
+    """Czyści kolumnę Activity - obsługuje zakresy, nierówności, konwertuje do float."""
+    column_name = column_name.strip()
+    # Walidacja: sprawdź czy column_name nie jest pusty
+    if not column_name:
+        raise ValueError("No column name provided. Please specify a column name to clean activity values.")
+    # Walidacja: sprawdź czy kolumna istnieje
+    if column_name not in dataframe.columns:
+        raise ValueError(
+            f"Column '{column_name}' not found in DataFrame. Available columns: {list(dataframe.columns)}."
+        )
+    # Walidacja: sprawdź strategię dla zakresów
+    valid_strategies = ["min", "max", "mean", "median"]
+    if range_strategy not in valid_strategies:
+        raise ValueError(f"Invalid range_strategy: {range_strategy}. Must be one of {valid_strategies}.")
+    # Zastosuj funkcję czyszczącą
+    cleaned_df = dataframe.copy()
+    cleaned_df[column_name] = cleaned_df[column_name].apply(
+        lambda x: _parse_activity_value(x, range_strategy, decimal_places)
+    )
+    # Przygotuj info do logów
+    logger.info("Cleaned activity values in column '%s' with strategy '%s'.", column_name, range_strategy)
+    logger.info("Rows before: %d, after: %d.", len(dataframe), len(cleaned_df))
+    return cleaned_df
+
+
 def drop_na_in_column(dataframe: pd.DataFrame, column_name: str) -> pd.DataFrame:
     """Usuwa wiersze z pustymi wartościami w wybranej kolumnie."""
     column_name = column_name.strip()
