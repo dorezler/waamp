@@ -8,6 +8,29 @@ import pandas as pd
 
 logger = logging.getLogger(__name__)
 
+# Masy monoisotopowe aminokwasów (Da) - pełna masa (monoisotopic)
+AMINO_ACID_WEIGHTS = {
+    "A": 89.047,  # Alanine
+    "C": 121.020,  # Cysteine
+    "D": 133.038,  # Aspartic acid
+    "E": 147.053,  # Glutamic acid
+    "F": 165.079,  # Phenylalanine
+    "G": 75.032,  # Glycine
+    "H": 155.069,  # Histidine
+    "I": 131.095,  # Isoleucine
+    "K": 146.106,  # Lysine
+    "L": 131.095,  # Leucine
+    "M": 149.051,  # Methionine
+    "N": 132.053,  # Asparagine
+    "P": 115.063,  # Proline
+    "Q": 146.069,  # Glutamine
+    "R": 174.112,  # Arginine
+    "S": 105.043,  # Serine
+    "T": 119.058,  # Threonine
+    "V": 117.079,  # Valine
+    "W": 204.090,  # Tryptophan
+    "Y": 181.074,  # Tyrosine
+}
 # Standardowe aminokwasy (20 naturalnych, tylko wielkie litery)
 STANDARD_AMINO_ACIDS = "ACDEFGHIKLMNPQRSTVWY"
 
@@ -21,6 +44,51 @@ def _apply_range_strategy(num1: float, num2: float, strategy: str, decimal_place
         "median": (num1 + num2) / 2,
     }
     return round(strategy_map[strategy], decimal_places)
+
+
+def _calculate_molecular_weight(sequence: str) -> float:
+    """Oblicza masę cząsteczkową peptydu z sekwencji aminokwasów.
+
+    MW = Σ(masy aminokwasów) - (n-1) × 18.015
+    gdzie n = liczba aminokwasów, 18.015 = masa H2O (strata przy tworzeniu wiązania peptydowego)
+    """
+    if pd.isna(sequence) or not sequence:
+        return 0.0
+    sequence = str(sequence).strip().upper()
+    # Suma mas aminokwasów
+    total_weight = sum(AMINO_ACID_WEIGHTS.get(aa, 0.0) for aa in sequence)
+    # Odejmij masę H2O za każde wiązanie peptydowe (n-1 wiązań dla n aminokwasów)
+    num_peptide_bonds = len(sequence) - 1
+    total_weight -= num_peptide_bonds * 18.015
+    return total_weight
+
+
+def _convert_unit_for_row(current_unit: str, activity: float, mw: float, target_unit: str) -> float:
+    """Konwertuje jednostkę aktywności dla pojedynczego wiersza.
+
+    Args:
+        current_unit: Aktualna jednostka z wiersza
+        activity: Wartość aktywności
+        mw: Masa cząsteczkowa peptydu
+        target_unit: Docelowa jednostka
+
+    Returns:
+        Skonwertowana wartość aktywności
+    """
+    # Pomijanie wierszy bez MW lub Activity
+    if pd.isna(activity) or mw == 0.0:
+        return activity
+    # Bez konwersji jeśli jednostki są takie same
+    if current_unit == target_unit:
+        return activity
+    # Konwersja µg/ml → µM
+    if current_unit == "µg/ml" and target_unit == "µM":
+        return activity * 1000 / mw
+    # Konwersja µM → µg/ml
+    if current_unit == "µM" and target_unit == "µg/ml":
+        return activity * mw / 1000
+    # Nieznana jednostka - zwróć oryginalną wartość
+    return activity
 
 
 def _parse_activity_value(value: str, range_strategy: str, decimal_places: int) -> float | None:
@@ -79,6 +147,51 @@ def clean_activity_values(
     logger.info("Cleaned activity values in column '%s' with strategy '%s'.", column_name, range_strategy)
     logger.info("Rows before: %d, after: %d.", len(dataframe), len(cleaned_df))
     return cleaned_df
+
+
+def convert_units(
+    dataframe: pd.DataFrame,
+    sequence_column: str,
+    unit_column: str,
+    activity_column: str,
+    target_unit: str,
+) -> pd.DataFrame:
+    """Konwertuje jednostki aktywności µg/ml ↔ µM używając masy cząsteczkowej peptydu."""
+    sequence_column = sequence_column.strip()
+    unit_column = unit_column.strip()
+    activity_column = activity_column.strip()
+    target_unit = target_unit.strip()
+    # Walidacja: sprawdź czy kolumny nie są puste
+    if not sequence_column or not unit_column or not activity_column or not target_unit:
+        raise ValueError("All column names and target unit must be provided.")
+    # Walidacja: sprawdź czy kolumny istnieją
+    for col_name in [sequence_column, unit_column, activity_column]:
+        if col_name not in dataframe.columns:
+            raise ValueError(
+                f"Column '{col_name}' not found in DataFrame. Available columns: {list(dataframe.columns)}."
+            )
+    # Walidacja: sprawdź target_unit
+    valid_units = ["µM", "µg/ml"]
+    if target_unit not in valid_units:
+        raise ValueError(f"Invalid target_unit: {target_unit}. Must be one of {valid_units}.")
+    converted_df = dataframe.copy()
+    # Oblicz masy cząsteczkowe dla wszystkich peptydów
+    converted_df["_mw"] = converted_df[sequence_column].apply(_calculate_molecular_weight)
+    # Zastosuj konwersję jednostek
+    converted_df[activity_column] = converted_df.apply(
+        lambda row: _convert_unit_for_row(str(row[unit_column]).strip(), row[activity_column], row["_mw"], target_unit),
+        axis=1,
+    )
+    # Zaktualizuj kolumnę Unit
+    converted_df[unit_column] = converted_df[unit_column].apply(
+        lambda x: target_unit if str(x).strip() in ["µM", "µg/ml"] else x
+    )
+    # Usuń tymczasową kolumnę _mw
+    converted_df = converted_df.drop(columns=["_mw"])
+    # Przygotuj info do logów
+    logger.info("Converted units in column '%s' to '%s'.", activity_column, target_unit)
+    logger.info("Rows: %d.", len(converted_df))
+    return converted_df
 
 
 def drop_na_in_column(dataframe: pd.DataFrame, column_name: str) -> pd.DataFrame:

@@ -7,6 +7,7 @@ import pandas as pd
 
 from .amp_functions import (
     clean_activity_values,
+    convert_units,
     drop_na_in_column,
     filter_column_by_regex,
     filter_standard_amino_acids,
@@ -42,6 +43,41 @@ class CleanActivityValuesNode:
         """Czyści kolumnę Activity - obsługuje zakresy, nierówności, konwertuje do float."""
         cleaned_df = clean_activity_values(dataframe, column_name, range_strategy, decimal_places)
         return (cleaned_df,)
+
+
+class ConvertUnitsNode:
+    """Węzeł do konwersji jednostek aktywności µg/ml ↔ µM."""
+
+    # Stałe klasowe definiujące interfejs węzła
+    RETURN_TYPES = ("DATAFRAME",)  # Zwraca DataFrame
+    RETURN_NAMES = ("dataframe",)  # Nazwa outputu
+    FUNCTION = "convert_units"  # Nazwa funkcji do wywołania
+    CATEGORY = "AMP Research/Data Processing"  # Kategoria w menu ComfyUI
+
+    @classmethod
+    def INPUT_TYPES(cls) -> dict:  # pylint: disable=invalid-name
+        """Definiuje typy wejściowe dla węzła."""
+        return {
+            "required": {
+                "dataframe": ("DATAFRAME",),  # DataFrame do konwersji
+                "sequence_column": ("STRING", {"default": "Peptide Sequence"}),  # Kolumna z sekwencją
+                "unit_column": ("STRING", {"default": "Unit"}),  # Kolumna z jednostkami
+                "activity_column": ("STRING", {"default": "Activity"}),  # Kolumna z aktywnością
+                "target_unit": (["µM", "µg/ml"], {"default": "µM"}),  # Docelowa jednostka
+            },
+        }
+
+    def convert_units(
+        self,
+        dataframe: pd.DataFrame,
+        sequence_column: str,
+        unit_column: str,
+        activity_column: str,
+        target_unit: str,
+    ) -> tuple[pd.DataFrame]:
+        """Konwertuje jednostki aktywności używając masy cząsteczkowej peptydu."""
+        converted_df = convert_units(dataframe, sequence_column, unit_column, activity_column, target_unit)
+        return (converted_df,)
 
 
 class DropNANode:
@@ -197,6 +233,7 @@ NODE_CLASS_MAPPINGS = {
     "FilterStandardAminoAcidsNode": FilterStandardAminoAcidsNode,
     "DropNANode": DropNANode,
     "CleanActivityValuesNode": CleanActivityValuesNode,
+    "ConvertUnitsNode": ConvertUnitsNode,
     "SaveCSVNode": SaveCSVNode,
 }
 
@@ -207,5 +244,6 @@ NODE_DISPLAY_NAME_MAPPINGS = {
     "FilterStandardAminoAcidsNode": "Filter Standard Amino Acids",
     "DropNANode": "Drop NA Values",
     "CleanActivityValuesNode": "Clean Activity Values",
+    "ConvertUnitsNode": "Convert Activity Units",
     "SaveCSVNode": "Save CSV Data",
 }
