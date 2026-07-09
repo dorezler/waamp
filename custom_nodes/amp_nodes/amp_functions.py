@@ -2,10 +2,40 @@
 
 import logging
 import os
+import re
 
 import pandas as pd
 
 logger = logging.getLogger(__name__)
+
+
+def filter_column_by_regex(dataframe: pd.DataFrame, column_name: str, pattern: str) -> pd.DataFrame:
+    """Filtruje wiersze DataFrame po zawartości kolumny z użyciem wyrażenia regularnego."""
+    pattern = pattern.strip()
+    column_name = column_name.strip()
+    # Walidacja: sprawdź czy column_name nie jest pusty
+    if not column_name:
+        raise ValueError("No column name provided. Please specify a column name to filter by.")
+    # Walidacja: sprawdź czy pattern nie jest pusty
+    if not pattern:
+        raise ValueError("No pattern provided. Please specify a regex pattern to filter by.")
+    # Walidacja: sprawdź czy kolumna istnieje
+    if column_name not in dataframe.columns:
+        raise ValueError(
+            f"Column '{column_name}' not found in DataFrame. Available columns: {list(dataframe.columns)}."
+        )
+    # Walidacja: sprawdź czy pattern jest poprawnym wyrażeniem regularnym
+    try:
+        compiled_pattern = re.compile(pattern)
+    except re.error as e:
+        raise ValueError(f"Invalid regex pattern: {pattern}. Error: {e}.") from e
+    # Filtruj DataFrame
+    mask = dataframe[column_name].astype(str).str.contains(compiled_pattern, na=False, regex=True)
+    filtered_df = dataframe[mask].copy()
+    # Przygotuj info do logów
+    logger.info("Filtered by column '%s' with pattern '%s'.", column_name, pattern)
+    logger.info("Rows before: %d, after: %d.", len(dataframe), len(filtered_df))
+    return filtered_df
 
 
 def load_csv_file(csv_path: str) -> pd.DataFrame:
