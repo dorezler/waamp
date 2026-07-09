@@ -327,3 +327,30 @@ def save_csv_file(
     else:
         logger.info("Saved CSV file: %s.", output_path)
     logger.info("Shape: %s, Columns: %s.", dataframe.shape, list(dataframe.columns))
+
+
+def select_columns(dataframe: pd.DataFrame, columns: list[str]) -> pd.DataFrame:
+    """Wybiera tylko określone kolumny z DataFrame.
+
+    Args:
+        dataframe: DataFrame do filtrowania
+        columns: Lista nazw kolumn do zachowania
+
+    Returns:
+        DataFrame zawierający tylko wybrane kolumny
+    """
+    # Walidacja: sprawdź czy lista nie jest pusta
+    if not columns:
+        raise ValueError("No columns provided. Please specify at least one column to select.")
+    # Walidacja: sprawdź czy wszystkie kolumny istnieją
+    missing_columns = [col for col in columns if col not in dataframe.columns]
+    if missing_columns:
+        raise ValueError(
+            f"Columns {missing_columns} not found in DataFrame. Available columns: {list(dataframe.columns)}."
+        )
+    # Wybierz tylko określone kolumny
+    selected_df = dataframe[columns].copy()
+    # Przygotuj info do logów
+    logger.info("Selected columns: %s.", columns)
+    logger.info("Shape before: %s, after: %s.", dataframe.shape, selected_df.shape)
+    return selected_df

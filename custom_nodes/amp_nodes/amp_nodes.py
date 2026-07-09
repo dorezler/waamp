@@ -1,5 +1,6 @@
 """Niestandardowe węzły ComfyUI do przetwarzania danych badań AMP."""
 
+import json
 import time
 from pathlib import Path
 
@@ -14,6 +15,7 @@ from .amp_functions import (
     load_csv_file,
     round_column_values,
     save_csv_file,
+    select_columns,
 )
 
 
@@ -250,6 +252,32 @@ class SaveCSVNode:
         return {}
 
 
+class SelectColumnsNode:
+    """Węzeł do wyboru określonych kolumn z DataFrame."""
+
+    # Stałe klasowe definiujące interfejs węzła
+    RETURN_TYPES = ("DATAFRAME",)  # Zwraca DataFrame
+    RETURN_NAMES = ("dataframe",)  # Nazwa outputu
+    FUNCTION = "select_columns"  # Nazwa funkcji do wywołania
+    CATEGORY = "AMP Research/Data Processing"  # Kategoria w menu ComfyUI
+
+    @classmethod
+    def INPUT_TYPES(cls) -> dict:  # pylint: disable=invalid-name
+        """Definiuje typy wejściowe dla węzła."""
+        return {
+            "required": {
+                "dataframe": ("DATAFRAME",),  # DataFrame do filtrowania
+                "columns": ("STRING", {}),  # Lista kolumn w formacie JSON
+            },
+        }
+
+    def select_columns(self, dataframe: pd.DataFrame, columns: str) -> tuple[pd.DataFrame]:
+        """Wybiera tylko określone kolumny z DataFrame."""
+        columns_list = json.loads(columns)
+        selected_df = select_columns(dataframe, columns_list)
+        return (selected_df,)
+
+
 # Mapowanie klas węzłów dla ComfyUI
 NODE_CLASS_MAPPINGS = {
     "LoadCSVNode": LoadCSVNode,
@@ -259,6 +287,7 @@ NODE_CLASS_MAPPINGS = {
     "CleanActivityValuesNode": CleanActivityValuesNode,
     "ConvertUnitsNode": ConvertUnitsNode,
     "RoundValuesNode": RoundValuesNode,
+    "SelectColumnsNode": SelectColumnsNode,
     "SaveCSVNode": SaveCSVNode,
 }
 
@@ -271,5 +300,6 @@ NODE_DISPLAY_NAME_MAPPINGS = {
     "CleanActivityValuesNode": "Clean Activity Values",
     "ConvertUnitsNode": "Convert Activity Units",
     "RoundValuesNode": "Round Values",
+    "SelectColumnsNode": "Select Columns",
     "SaveCSVNode": "Save CSV Data",
 }
