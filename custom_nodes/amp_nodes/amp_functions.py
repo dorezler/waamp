@@ -175,6 +175,47 @@ def clean_activity_values(dataframe: pd.DataFrame, column_name: str, range_strat
     return cleaned_df
 
 
+def convert_to_binary_classification(
+    dataframe: pd.DataFrame, activity_column: str, threshold: float, output_column: str = "Label"
+) -> pd.DataFrame:
+    """Konwertuje wartości aktywności do klasyfikacji binarnej.
+
+    Args:
+        dataframe: DataFrame z wartościami aktywności
+        activity_column: Nazwa kolumny z wartościami aktywności
+        threshold: Próg aktywności (wartości <= próg są aktywne, wartość 1)
+        output_column: Nazwa kolumny wyjściowej z etykietami (domyślnie "Label")
+
+    Returns:
+        DataFrame z dodaną kolumną klasyfikacji binarnej (1 = aktywny, 0 = nieaktywny)
+    """
+    activity_column = activity_column.strip()
+    output_column = output_column.strip()
+    # Walidacja: sprawdź czy activity_column nie jest pusty
+    if not activity_column:
+        raise ValueError("No activity column provided. Please specify an activity column name.")
+    # Walidacja: sprawdź czy kolumna istnieje
+    if activity_column not in dataframe.columns:
+        raise ValueError(
+            f"Column '{activity_column}' not found in DataFrame. Available columns: {list(dataframe.columns)}."
+        )
+    # Walidacja: sprawdź threshold
+    if threshold <= 0:
+        raise ValueError(f"Invalid threshold: {threshold}. Must be > 0.")
+    # Walidacja: sprawdź czy output_column nie jest pusty
+    if not output_column:
+        raise ValueError("No output column name provided. Please specify an output column name.")
+    # Konwersja do klasyfikacji binarnej: <= threshold -> 1 (aktywny), > threshold -> 0 (nieaktywny)
+    classified_df = dataframe.copy()
+    classified_df[output_column] = (classified_df[activity_column] <= threshold).astype(int)
+    # Przygotuj info do logów
+    active_count = (classified_df[output_column] == 1).sum()
+    inactive_count = (classified_df[output_column] == 0).sum()
+    logger.info("Converted to binary classification with threshold %.2f in column '%s'.", threshold, activity_column)
+    logger.info("Active (1): %d, Inactive (0): %d.", active_count, inactive_count)
+    return classified_df
+
+
 def convert_units(
     dataframe: pd.DataFrame,
     sequence_column: str,

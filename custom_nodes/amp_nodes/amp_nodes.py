@@ -9,6 +9,7 @@ import pandas as pd
 from .amp_functions import (
     aggregate_duplicates,
     clean_activity_values,
+    convert_to_binary_classification,
     convert_units,
     drop_na_in_column,
     filter_column_by_regex,
@@ -70,6 +71,35 @@ class CleanActivityValuesNode:
         """Czyści kolumnę Activity - obsługuje zakresy, nierówności, konwertuje do float."""
         cleaned_df = clean_activity_values(dataframe, column_name, range_strategy)
         return (cleaned_df,)
+
+
+class ConvertToBinaryClassificationNode:
+    """Węzeł do konwersji wartości aktywności do klasyfikacji binarnej."""
+
+    # Stałe klasowe definiujące interfejs węzła
+    RETURN_TYPES = ("DATAFRAME",)  # Zwraca DataFrame
+    RETURN_NAMES = ("dataframe",)  # Nazwa outputu
+    FUNCTION = "convert_to_binary"  # Nazwa funkcji do wywołania
+    CATEGORY = "AMP Research/Data Processing"  # Kategoria w menu ComfyUI
+
+    @classmethod
+    def INPUT_TYPES(cls) -> dict:  # pylint: disable=invalid-name
+        """Definiuje typy wejściowe dla węzła."""
+        return {
+            "required": {
+                "dataframe": ("DATAFRAME",),  # DataFrame do konwersji
+                "activity_column": ("STRING", {}),  # Kolumna z aktywnością
+                "threshold": ("FLOAT", {}),  # Próg klasyfikacji
+                "output_column": ("STRING", {}),  # Nazwa kolumny wyjściowej
+            },
+        }
+
+    def convert_to_binary(
+        self, dataframe: pd.DataFrame, activity_column: str, threshold: float, output_column: str
+    ) -> tuple[pd.DataFrame]:
+        """Konwertuje wartości aktywności do klasyfikacji binarnej."""
+        classified_df = convert_to_binary_classification(dataframe, activity_column, threshold, output_column)
+        return (classified_df,)
 
 
 class ConvertUnitsNode:
@@ -316,6 +346,7 @@ NODE_CLASS_MAPPINGS = {
     "RoundValuesNode": RoundValuesNode,
     "SelectColumnsNode": SelectColumnsNode,
     "AggregateDuplicatesNode": AggregateDuplicatesNode,
+    "ConvertToBinaryClassificationNode": ConvertToBinaryClassificationNode,
     "SaveCSVNode": SaveCSVNode,
 }
 
@@ -330,5 +361,6 @@ NODE_DISPLAY_NAME_MAPPINGS = {
     "RoundValuesNode": "Round Values",
     "SelectColumnsNode": "Select Columns",
     "AggregateDuplicatesNode": "Aggregate Duplicates",
+    "ConvertToBinaryClassificationNode": "Convert to Binary Classification",
     "SaveCSVNode": "Save CSV Data",
 }
