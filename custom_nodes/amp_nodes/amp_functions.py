@@ -4,7 +4,9 @@ import logging
 import os
 import re
 
+import numpy as np
 import pandas as pd
+from modlamp.descriptors import GlobalDescriptor
 
 logger = logging.getLogger(__name__)
 
@@ -425,3 +427,62 @@ def select_columns(dataframe: pd.DataFrame, columns: list[str]) -> pd.DataFrame:
     logger.info("Selected columns: %s.", columns)
     logger.info("Shape before: %s, after: %s.", dataframe.shape, selected_df.shape)
     return selected_df
+
+
+def vectorize_sequences(dataframe: pd.DataFrame, sequence_column: str, label_column: str) -> np.ndarray:
+    """Wektoryzuje sekwencje peptydów do cech numerycznych używając modlamp GlobalDescriptor.
+
+    Oblicza 10 globalnych deskryptorów dla każdej sekwencji:
+    - Length, MW, Charge, ChargeDensity, pI, InstabilityInd, Aromaticity, AliphaticInd, BomanInd, HydrophRatio
+
+    Args:
+        dataframe: DataFrame z sekwencjami i labelkami
+        sequence_column: Nazwa kolumny z sekwencjami peptydów
+        label_column: Nazwa kolumny z labelkami (0/1)
+
+    Returns:
+        Numpy array 2D: [features..., label] - każdy wiersz to 10 cech + labelka
+    """
+    sequence_column = sequence_column.strip()
+    label_column = label_column.strip()
+
+    # Walidacja: sprawdź czy kolumny nie są puste
+    if not sequence_column or not label_column:
+        raise ValueError("Both sequence_column and label_column must be provided.")
+    # Walidacja: sprawdź czy kolumny istnieją
+    for col_name in [sequence_column, label_column]:
+        if col_name not in dataframe.columns:
+            raise ValueError(
+                f"Column '{col_name}' not found in DataFrame. Available columns: {list(dataframe.columns)}."
+            )
+
+    # Pobierz sekwencje i labelki
+    sequences = dataframe[sequence_column].tolist()
+    labels = dataframe[label_column].to_numpy().reshape(-1, 1)
+
+    # Wektoryzuj sekwencje używając modlamp GlobalDescriptor
+    descriptor = GlobalDescriptor(sequences)
+    descriptor.calculate_all()  # Oblicz wszystkie globalne deskryptory
+
+    # Pobierz macierz cech (n_samples, n_features) i nazwy cech
+    features = descriptor.descriptor
+    feature_names = descriptor.featurenames
+
+    # Połącz cechy z labelkami: [features..., label]
+    vectorized_data = np.hstack([features, labels])
+
+    # Przygotuj info do logów
+    logger.info(
+        "Vectorized %d sequences using GlobalDescriptor.calculate_all(). Features: %s",
+        len(sequences),
+        feature_names,
+    )
+    logger.info("Feature shape: %s, Final shape: %s", features.shape, vectorized_data.shape)
+    logger.info("First 3 rows of vectorized data:\n%s", vectorized_data[:3])
+    logger.info(
+        "Data statistics - min: %.3f, max: %.3f, mean: %.3f",
+        vectorized_data.min(),
+        vectorized_data.max(),
+        vectorized_data.mean(),
+    )
+    return vectorized_data

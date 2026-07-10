@@ -18,6 +18,7 @@ from .amp_functions import (
     round_column_values,
     save_csv_file,
     select_columns,
+    vectorize_sequences,
 )
 
 
@@ -335,6 +336,37 @@ class SelectColumnsNode:
         return (selected_df,)
 
 
+class VectorizeSequencesNode:
+    """Węzeł do wektoryzacji sekwencji peptydów używając modlamp GlobalDescriptor.
+
+    Oblicza 10 globalnych deskryptorów: Length, MW, Charge, ChargeDensity, pI,
+    InstabilityInd, Aromaticity, AliphaticInd, BomanInd, HydrophRatio
+    """
+
+    # Stałe klasowe definiujące interfejs węzła
+    RETURN_TYPES = ("NUMPY_ARRAY",)  # Zwraca numpy array
+    RETURN_NAMES = ("vectorized_data",)  # Nazwa outputu
+    FUNCTION = "vectorize"  # Nazwa funkcji do wywołania
+    CATEGORY = "AMP Research/Feature Engineering"  # Kategoria w menu ComfyUI
+    OUTPUT_NODE = True  # Oznacz jako węzeł wyjściowy - wymusza wykonanie
+
+    @classmethod
+    def INPUT_TYPES(cls) -> dict:  # pylint: disable=invalid-name
+        """Definiuje typy wejściowe dla węzła."""
+        return {
+            "required": {
+                "dataframe": ("DATAFRAME",),  # DataFrame z sekwencjami i labelkami
+                "sequence_column": ("STRING", {}),  # Kolumna z sekwencjami
+                "label_column": ("STRING", {}),  # Kolumna z labelkami
+            },
+        }
+
+    def vectorize(self, dataframe: pd.DataFrame, sequence_column: str, label_column: str) -> tuple:
+        """Wektoryzuje sekwencje peptydów do numpy array [10 features..., label]."""
+        vectorized_array = vectorize_sequences(dataframe, sequence_column, label_column)
+        return (vectorized_array,)
+
+
 # Mapowanie klas węzłów dla ComfyUI
 NODE_CLASS_MAPPINGS = {
     "LoadCSVNode": LoadCSVNode,
@@ -347,6 +379,7 @@ NODE_CLASS_MAPPINGS = {
     "SelectColumnsNode": SelectColumnsNode,
     "AggregateDuplicatesNode": AggregateDuplicatesNode,
     "ConvertToBinaryClassificationNode": ConvertToBinaryClassificationNode,
+    "VectorizeSequencesNode": VectorizeSequencesNode,
     "SaveCSVNode": SaveCSVNode,
 }
 
@@ -362,5 +395,6 @@ NODE_DISPLAY_NAME_MAPPINGS = {
     "SelectColumnsNode": "Select Columns",
     "AggregateDuplicatesNode": "Aggregate Duplicates",
     "ConvertToBinaryClassificationNode": "Convert to Binary Classification",
+    "VectorizeSequencesNode": "Vectorize Sequences",
     "SaveCSVNode": "Save CSV Data",
 }
