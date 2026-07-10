@@ -1,0 +1,478 @@
+{
+  "last_node_id": 18,
+  "last_link_id": 15,
+  "nodes": [
+    {
+      "id": 1,
+      "type": "LoadCSVNode",
+      "pos": [100, 100],
+      "size": [300, 100],
+      "flags": {},
+      "order": 0,
+      "mode": 0,
+      "outputs": [
+        {
+          "name": "dataframe",
+          "type": "DATAFRAME",
+          "links": [1],
+          "slot_index": 0
+        }
+      ],
+      "properties": {},
+      "widgets_values": ["", ""],
+      "title": "1. Load CSV Data"
+    },
+    {
+      "id": 2,
+      "type": "FilterByRegexNode",
+      "pos": [500, 100],
+      "size": [300, 120],
+      "flags": {},
+      "order": 1,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "dataframe",
+          "type": "DATAFRAME",
+          "link": 1
+        }
+      ],
+      "outputs": [
+        {
+          "name": "dataframe",
+          "type": "DATAFRAME",
+          "links": [2],
+          "slot_index": 0
+        }
+      ],
+      "properties": {},
+      "widgets_values": ["Target Species", "Staphylococcus aureus ATCC (?:25923|29213)"],
+      "title": "2. Filter by Target Species"
+    },
+    {
+      "id": 3,
+      "type": "FilterByRegexNode",
+      "pos": [900, 100],
+      "size": [300, 120],
+      "flags": {},
+      "order": 2,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "dataframe",
+          "type": "DATAFRAME",
+          "link": 2
+        }
+      ],
+      "outputs": [
+        {
+          "name": "dataframe",
+          "type": "DATAFRAME",
+          "links": [3],
+          "slot_index": 0
+        }
+      ],
+      "properties": {},
+      "widgets_values": ["Activity Measure", "MIC"],
+      "title": "3. Filter by Activity Measure"
+    },
+    {
+      "id": 4,
+      "type": "FilterStandardAminoAcidsNode",
+      "pos": [1300, 100],
+      "size": [300, 100],
+      "flags": {},
+      "order": 3,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "dataframe",
+          "type": "DATAFRAME",
+          "link": 3
+        }
+      ],
+      "outputs": [
+        {
+          "name": "dataframe",
+          "type": "DATAFRAME",
+          "links": [4],
+          "slot_index": 0
+        }
+      ],
+      "properties": {},
+      "widgets_values": ["Peptide Sequence"],
+      "title": "4. Filter Standard Amino Acids"
+    },
+    {
+      "id": 5,
+      "type": "DropNANode",
+      "pos": [1700, 100],
+      "size": [300, 100],
+      "flags": {},
+      "order": 4,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "dataframe",
+          "type": "DATAFRAME",
+          "link": 4
+        }
+      ],
+      "outputs": [
+        {
+          "name": "dataframe",
+          "type": "DATAFRAME",
+          "links": [5],
+          "slot_index": 0
+        }
+      ],
+      "properties": {},
+      "widgets_values": ["Peptide Sequence"],
+      "title": "5. Drop NA in Peptide Sequence"
+    },
+    {
+      "id": 6,
+      "type": "CleanActivityValuesNode",
+      "pos": [2100, 100],
+      "size": [300, 140],
+      "flags": {},
+      "order": 5,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "dataframe",
+          "type": "DATAFRAME",
+          "link": 5
+        }
+      ],
+      "outputs": [
+        {
+          "name": "dataframe",
+          "type": "DATAFRAME",
+          "links": [6],
+          "slot_index": 0
+        }
+      ],
+      "properties": {},
+      "widgets_values": ["Activity", "mean"],
+      "title": "6. Clean Activity Values"
+    },
+    {
+      "id": 7,
+      "type": "DropNANode",
+      "pos": [2500, 100],
+      "size": [300, 100],
+      "flags": {},
+      "order": 6,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "dataframe",
+          "type": "DATAFRAME",
+          "link": 6
+        }
+      ],
+      "outputs": [
+        {
+          "name": "dataframe",
+          "type": "DATAFRAME",
+          "links": [7],
+          "slot_index": 0
+        }
+      ],
+      "properties": {},
+      "widgets_values": ["Activity"],
+      "title": "7. Drop NA in Activity"
+    },
+    {
+      "id": 8,
+      "type": "ConvertUnitsNode",
+      "pos": [2900, 100],
+      "size": [300, 160],
+      "flags": {},
+      "order": 7,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "dataframe",
+          "type": "DATAFRAME",
+          "link": 7
+        }
+      ],
+      "outputs": [
+        {
+          "name": "dataframe",
+          "type": "DATAFRAME",
+          "links": [8],
+          "slot_index": 0
+        }
+      ],
+      "properties": {},
+      "widgets_values": ["Peptide Sequence", "Unit", "Activity", "µM"],
+      "title": "8. Convert Activity Units"
+    },
+    {
+      "id": 15,
+      "type": "SaveCSVNode",
+      "pos": [3100, 250],
+      "size": [300, 120],
+      "flags": {},
+      "order": 8,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "dataframe",
+          "type": "DATAFRAME",
+          "link": 8
+        }
+      ],
+      "outputs": [],
+      "properties": {},
+      "widgets_values": ["output/checkpoint1.csv", "False", "True"],
+      "title": "Checkpoint 1"
+    },
+    {
+      "id": 11,
+      "type": "SelectColumnsNode",
+      "pos": [3300, 100],
+      "size": [300, 100],
+      "flags": {},
+      "order": 9,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "dataframe",
+          "type": "DATAFRAME",
+          "link": 8
+        }
+      ],
+      "outputs": [
+        {
+          "name": "dataframe",
+          "type": "DATAFRAME",
+          "links": [10],
+          "slot_index": 0
+        }
+      ],
+      "properties": {},
+      "widgets_values": ["[\"Peptide Sequence\", \"Activity\"]"],
+      "title": "9. Select Columns"
+    },
+    {
+      "id": 12,
+      "type": "AggregateDuplicatesNode",
+      "pos": [3700, 100],
+      "size": [300, 120],
+      "flags": {},
+      "order": 10,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "dataframe",
+          "type": "DATAFRAME",
+          "link": 10
+        }
+      ],
+      "outputs": [
+        {
+          "name": "dataframe",
+          "type": "DATAFRAME",
+          "links": [11],
+          "slot_index": 0
+        }
+      ],
+      "properties": {},
+      "widgets_values": ["Peptide Sequence", "mean"],
+      "title": "10. Aggregate Duplicates"
+    },
+    {
+      "id": 10,
+      "type": "RoundValuesNode",
+      "pos": [4100, 100],
+      "size": [300, 120],
+      "flags": {},
+      "order": 11,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "dataframe",
+          "type": "DATAFRAME",
+          "link": 11
+        }
+      ],
+      "outputs": [
+        {
+          "name": "dataframe",
+          "type": "DATAFRAME",
+          "links": [12],
+          "slot_index": 0
+        }
+      ],
+      "properties": {},
+      "widgets_values": ["Activity", 2],
+      "title": "11. Round Activity Values"
+    },
+    {
+      "id": 13,
+      "type": "ConvertToBinaryClassificationNode",
+      "pos": [4500, 100],
+      "size": [300, 140],
+      "flags": {},
+      "order": 12,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "dataframe",
+          "type": "DATAFRAME",
+          "link": 12
+        }
+      ],
+      "outputs": [
+        {
+          "name": "dataframe",
+          "type": "DATAFRAME",
+          "links": [13],
+          "slot_index": 0
+        }
+      ],
+      "properties": {},
+      "widgets_values": ["Activity", 10.0, "Label"],
+      "title": "12. Convert to Binary Classification"
+    },
+    {
+      "id": 16,
+      "type": "SaveCSVNode",
+      "pos": [4700, 250],
+      "size": [300, 120],
+      "flags": {},
+      "order": 12,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "dataframe",
+          "type": "DATAFRAME",
+          "link": 13
+        }
+      ],
+      "outputs": [],
+      "properties": {},
+      "widgets_values": ["output/checkpoint2.csv", "False", "True"],
+      "title": "Checkpoint 2"
+    },
+    {
+      "id": 14,
+      "type": "SelectColumnsNode",
+      "pos": [4900, 100],
+      "size": [300, 100],
+      "flags": {},
+      "order": 13,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "dataframe",
+          "type": "DATAFRAME",
+          "link": 13
+        }
+      ],
+      "outputs": [
+        {
+          "name": "dataframe",
+          "type": "DATAFRAME",
+          "links": [9, 14],
+          "slot_index": 0
+        }
+      ],
+      "properties": {},
+      "widgets_values": ["[\"Peptide Sequence\", \"Label\"]"],
+      "title": "13. Select Columns"
+    },
+    {
+      "id": 17,
+      "type": "VectorizeSequencesESM2Node",
+      "pos": [5300, 250],
+      "size": [300, 100],
+      "flags": {},
+      "order": 14,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "dataframe",
+          "type": "DATAFRAME",
+          "link": 14
+        }
+      ],
+      "outputs": [
+        {
+          "name": "vectorized_data",
+          "type": "NUMPY_ARRAY",
+          "links": [15],
+          "slot_index": 0
+        }
+      ],
+      "properties": {},
+      "widgets_values": ["Peptide Sequence", "Label"],
+      "title": "14. Vectorize Sequences (ESM2-8M)"
+    },
+    {
+      "id": 18,
+      "type": "TrainRandomForestNode",
+      "pos": [5700, 250],
+      "size": [300, 200],
+      "flags": {},
+      "order": 15,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "vectorized_data",
+          "type": "NUMPY_ARRAY",
+          "link": 15
+        }
+      ],
+      "outputs": [],
+      "properties": {},
+      "widgets_values": ["output/models", "rf_classifier", 0.2, 100, 0, 42],
+      "title": "16. Train Random Forest"
+    },
+    {
+      "id": 9,
+      "type": "SaveCSVNode",
+      "pos": [5300, 100],
+      "size": [300, 120],
+      "flags": {},
+      "order": 14,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "dataframe",
+          "type": "DATAFRAME",
+          "link": 9
+        }
+      ],
+      "outputs": [],
+      "properties": {},
+      "widgets_values": ["output/output.csv", "False", "False"],
+      "title": "15. Save CSV Data"
+    }
+  ],
+  "links": [
+    [1, 1, 0, 2, 0, "DATAFRAME"],
+    [2, 2, 0, 3, 0, "DATAFRAME"],
+    [3, 3, 0, 4, 0, "DATAFRAME"],
+    [4, 4, 0, 5, 0, "DATAFRAME"],
+    [5, 5, 0, 6, 0, "DATAFRAME"],
+    [6, 6, 0, 7, 0, "DATAFRAME"],
+    [7, 7, 0, 8, 0, "DATAFRAME"],
+    [8, 8, 0, 11, 0, "DATAFRAME"],
+    [10, 11, 0, 12, 0, "DATAFRAME"],
+    [11, 12, 0, 10, 0, "DATAFRAME"],
+    [12, 10, 0, 13, 0, "DATAFRAME"],
+    [13, 13, 0, 14, 0, "DATAFRAME"],
+    [9, 14, 0, 9, 0, "DATAFRAME"],
+    [14, 14, 0, 17, 0, "DATAFRAME"],
+    [15, 17, 0, 18, 0, "NUMPY_ARRAY"]
+  ],
+  "groups": [],
+  "config": {},
+  "extra": {},
+  "version": 0.4
+}

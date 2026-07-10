@@ -1,0 +1,153 @@
+{
+  "last_node_id": 4,
+  "last_link_id": 5,
+  "nodes": [
+    {
+      "id": 1,
+      "type": "LoadCSVNode",
+      "pos": [100, 150],
+      "size": [300, 100],
+      "flags": {},
+      "order": 0,
+      "mode": 0,
+      "outputs": [
+        {
+          "name": "dataframe",
+          "type": "DATAFRAME",
+          "links": [1, 5],
+          "slot_index": 0
+        }
+      ],
+      "properties": {},
+      "widgets_values": ["", ""],
+      "title": "1. Load CSV with Sequences"
+    },
+    {
+      "id": 2,
+      "type": "LoadModelNode",
+      "pos": [100, 300],
+      "size": [300, 80],
+      "flags": {},
+      "order": 0,
+      "mode": 0,
+      "outputs": [
+        {
+          "name": "pipeline",
+          "type": "MODEL_PIPELINE",
+          "links": [2],
+          "slot_index": 0
+        }
+      ],
+      "properties": {},
+      "widgets_values": ["output/models/rf_classifier_pipeline.pkl"],
+      "title": "2. Load Trained Model"
+    },
+    {
+      "id": 3,
+      "type": "VectorizeSequencesForPredictionNode",
+      "pos": [500, 150],
+      "size": [300, 120],
+      "flags": {},
+      "order": 1,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "dataframe",
+          "type": "DATAFRAME",
+          "link": 1
+        }
+      ],
+      "outputs": [
+        {
+          "name": "features",
+          "type": "NUMPY_ARRAY",
+          "links": [3],
+          "slot_index": 0
+        }
+      ],
+      "properties": {},
+      "widgets_values": ["Peptide Sequence", "esm2"],
+      "title": "3. Vectorize Sequences (ESM2)"
+    },
+    {
+      "id": 4,
+      "type": "PredictNode",
+      "pos": [900, 200],
+      "size": [300, 100],
+      "flags": {},
+      "order": 2,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "pipeline",
+          "type": "MODEL_PIPELINE",
+          "link": 2
+        },
+        {
+          "name": "features",
+          "type": "NUMPY_ARRAY",
+          "link": 3
+        }
+      ],
+      "outputs": [
+        {
+          "name": "predictions",
+          "type": "PREDICTIONS",
+          "links": [4],
+          "slot_index": 0
+        },
+        {
+          "name": "probabilities",
+          "type": "PROBABILITIES",
+          "links": [6],
+          "slot_index": 1
+        }
+      ],
+      "properties": {},
+      "widgets_values": [],
+      "title": "4. Predict Activity"
+    },
+    {
+      "id": 5,
+      "type": "SavePredictionsNode",
+      "pos": [1300, 200],
+      "size": [300, 140],
+      "flags": {},
+      "order": 3,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "dataframe",
+          "type": "DATAFRAME",
+          "link": 5
+        },
+        {
+          "name": "predictions",
+          "type": "PREDICTIONS",
+          "link": 4
+        },
+        {
+          "name": "probabilities",
+          "type": "PROBABILITIES",
+          "link": 6
+        }
+      ],
+      "outputs": [],
+      "properties": {},
+      "widgets_values": ["output/predictions.csv", "Peptide Sequence"],
+      "title": "5. Save Predictions to CSV"
+    }
+  ],
+  "links": [
+    [1, 1, 0, 3, 0, "DATAFRAME"],
+    [2, 2, 0, 4, 0, "MODEL_PIPELINE"],
+    [3, 3, 0, 4, 1, "NUMPY_ARRAY"],
+    [4, 4, 0, 5, 1, "PREDICTIONS"],
+    [5, 1, 0, 5, 0, "DATAFRAME"],
+    [6, 4, 1, 5, 2, "PROBABILITIES"]
+  ],
+  "groups": [],
+  "config": {},
+  "extra": {},
+  "version": 0.4
+}
