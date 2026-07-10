@@ -1,6 +1,7 @@
 """Niestandardowe węzły ComfyUI do przetwarzania danych badań AMP."""
 
 import json
+import logging
 import time
 from pathlib import Path
 
@@ -15,14 +16,20 @@ from .amp_functions import (
     filter_column_by_regex,
     filter_standard_amino_acids,
     load_csv_file,
+    load_model_pipeline,
+    predict_with_pipeline,
     round_column_values,
     save_csv_file,
+    save_predictions_to_csv,
     select_columns,
     train_random_forest_classifier,
     vectorize_sequences,
     vectorize_sequences_aa_composition,
     vectorize_sequences_esm2,
+    vectorize_sequences_for_prediction,
 )
+
+logger = logging.getLogger(__name__)
 
 
 class AggregateDuplicatesNode:
@@ -218,7 +225,12 @@ class FilterStandardAminoAcidsNode:
 
 
 class LoadCSVNode:
-    """Węzeł do ładowania danych CSV do pandas DataFrame."""
+    """Węzeł do ładowania danych CSV do pandas DataFrame.
+
+    Obsługuje:
+    - Pojedynczy plik CSV
+    - Wiele plików CSV (rozdzielonych średnikami) - automatyczne połączenie w jeden DataFrame
+    """
 
     # Stałe klasowe definiujące interfejs węzła
     RETURN_TYPES = ("DATAFRAME",)  # Zwraca DataFrame
@@ -231,8 +243,10 @@ class LoadCSVNode:
         """Definiuje typy wejściowe dla węzła."""
         return {
             "required": {
-                "csv_path_from_list": (cls.get_input_csv_paths(), {}),  # Wybór pliku z listy
-                "csv_path_from_string": ("STRING", {"default": ""}),  # Ścieżka ręczna (fallback)
+                "csv_path_from_string": ("STRING", {"default": ""}),  # Ścieżka ręczna (priorytet)
+            },
+            "optional": {
+                "csv_path_from_list": (cls.get_input_csv_paths(), {}),  # Wybór pliku z listy (opcjonalny)
             },
         }
 
@@ -250,11 +264,46 @@ class LoadCSVNode:
         csv_paths = sorted([str(f.relative_to(".")) for f in input_dir.glob("*.csv")])
         return csv_paths if csv_paths else [""]
 
-    def load_csv(self, csv_path_from_list: str, csv_path_from_string: str) -> tuple[pd.DataFrame]:
-        """Wczytuje dane z pliku CSV do DataFrame."""
-        # Użyj csv_path_from_string jeśli podany, w przeciwnym razie csv_path_from_list
-        path = csv_path_from_string.strip() if csv_path_from_string.strip() else csv_path_from_list
-        df = load_csv_file(path)
+    def load_csv(self, csv_path_from_string: str, csv_path_from_list: str | None = None) -> tuple[pd.DataFrame]:
+        """Wczytuje dane z pliku CSV do DataFrame.
+
+        Obsługuje:
+        - Pojedynczy plik: "path/to/file.csv"
+        - Wiele plików (połączonych): "path/to/file1.csv;path/to/file2.csv;path/to/file3.csv"
+        """
+        # Priorytet: csv_path_from_string > csv_path_from_list > błąd
+        if csv_path_from_string.strip():
+            path_input = csv_path_from_string.strip()
+        elif csv_path_from_list and csv_path_from_list.strip():
+            path_input = csv_path_from_list.strip()
+        else:
+            raise ValueError(
+                "No CSV file path provided. Please specify a path in the text field or select from dropdown."
+            )
+
+        # Sprawdź czy są wielokrotne pliki (rozdzielone średnikami)
+        if ";" in path_input:
+            # Podziel ścieżki i usuń whitespace
+            paths = [p.strip() for p in path_input.split(";") if p.strip()]
+            if not paths:
+                raise ValueError("No valid CSV file paths found after splitting by semicolon.")
+
+            logger.info("Loading and combining %d CSV files: %s", len(paths), paths)
+
+            # Wczytaj wszystkie pliki i połącz
+            dataframes = []
+            for i, path in enumerate(paths, 1):
+                df = load_csv_file(path)
+                logger.info("  [%d/%d] Loaded %s: %d rows, %d columns", i, len(paths), path, len(df), len(df.columns))
+                dataframes.append(df)
+
+            # Połącz wszystkie DataFrames (concat wierszami, zignoruj stare indeksy)
+            combined_df = pd.concat(dataframes, ignore_index=True)
+            logger.info("Combined DataFrame: %d total rows, %d columns", len(combined_df), len(combined_df.columns))
+            return (combined_df,)
+
+        # Pojedynczy plik
+        df = load_csv_file(path_input)
         return (df,)
 
 
@@ -487,6 +536,117 @@ class VectorizeSequencesNode:
         return (vectorized_array,)
 
 
+class VectorizeSequencesForPredictionNode:
+    """Węzeł do wektoryzacji sekwencji peptydów do predykcji (bez kolumny label).
+
+    Obsługuje 3 typy wektoryzacji: global (10 features), aa_composition (20 features), esm2 (320 features).
+    """
+
+    # Stałe klasowe definiujące interfejs węzła
+    RETURN_TYPES = ("NUMPY_ARRAY",)  # Zwraca numpy array
+    RETURN_NAMES = ("features",)  # Nazwa outputu
+    FUNCTION = "vectorize"  # Nazwa funkcji do wywołania
+    CATEGORY = "AMP Research/Prediction"  # Kategoria w menu ComfyUI
+
+    @classmethod
+    def INPUT_TYPES(cls) -> dict:  # pylint: disable=invalid-name
+        """Definiuje typy wejściowe dla węzła."""
+        return {
+            "required": {
+                "dataframe": ("DATAFRAME",),  # DataFrame z sekwencjami
+                "sequence_column": ("STRING", {}),  # Kolumna z sekwencjami
+                "vectorizer": (
+                    ["global", "aa_composition", "esm2"],
+                    {"default": "global"},
+                ),  # Typ wektoryzera
+            },
+        }
+
+    def vectorize(self, dataframe: pd.DataFrame, sequence_column: str, vectorizer: str) -> tuple:
+        """Wektoryzuje sekwencje peptydów do numpy array [features...] bez labelek."""
+        features_array = vectorize_sequences_for_prediction(dataframe, sequence_column, vectorizer)
+        return (features_array,)
+
+
+class LoadModelNode:
+    """Węzeł do ładowania zapisanego modelu sklearn Pipeline (.pkl)."""
+
+    # Stałe klasowe definiujące interfejs węzła
+    RETURN_TYPES = ("MODEL_PIPELINE",)  # Zwraca załadowany pipeline
+    RETURN_NAMES = ("pipeline",)  # Nazwa outputu
+    FUNCTION = "load_model"  # Nazwa funkcji do wywołania
+    CATEGORY = "AMP Research/Prediction"  # Kategoria w menu ComfyUI
+
+    @classmethod
+    def INPUT_TYPES(cls) -> dict:  # pylint: disable=invalid-name
+        """Definiuje typy wejściowe dla węzła."""
+        return {
+            "required": {
+                "model_path": ("STRING", {"default": "output/models/rf_classifier_pipeline.pkl"}),  # Ścieżka do modelu
+            },
+        }
+
+    def load_model(self, model_path: str) -> tuple:
+        """Ładuje zapisany sklearn Pipeline z pliku .pkl."""
+        pipeline = load_model_pipeline(model_path)
+        return (pipeline,)
+
+
+class PredictNode:
+    """Węzeł do predykcji aktywności peptydów używając załadowanego modelu."""
+
+    # Stałe klasowe definiujące interfejs węzła
+    RETURN_TYPES = ("PREDICTIONS", "PROBABILITIES")  # Zwraca predykcje i prawdopodobieństwa
+    RETURN_NAMES = ("predictions", "probabilities")  # Nazwy outputów
+    FUNCTION = "predict"  # Nazwa funkcji do wywołania
+    CATEGORY = "AMP Research/Prediction"  # Kategoria w menu ComfyUI
+
+    @classmethod
+    def INPUT_TYPES(cls) -> dict:  # pylint: disable=invalid-name
+        """Definiuje typy wejściowe dla węzła."""
+        return {
+            "required": {
+                "pipeline": ("MODEL_PIPELINE",),  # Załadowany model pipeline
+                "features": ("NUMPY_ARRAY",),  # Zwektoryzowane cechy
+            },
+        }
+
+    def predict(self, pipeline, features) -> tuple:
+        """Wykonuje predykcję używając pipeline."""
+        predictions, probabilities = predict_with_pipeline(pipeline, features)
+        return (predictions, probabilities)
+
+
+class SavePredictionsNode:
+    """Węzeł do zapisywania predykcji do pliku CSV."""
+
+    # Stałe klasowe definiujące interfejs węzła
+    RETURN_TYPES = ()  # Brak outputów
+    FUNCTION = "save_predictions"  # Nazwa funkcji do wywołania
+    CATEGORY = "AMP Research/Prediction"  # Kategoria w menu ComfyUI
+    OUTPUT_NODE = True  # Oznacz jako węzeł wyjściowy (końcowy w workflow)
+
+    @classmethod
+    def INPUT_TYPES(cls) -> dict:  # pylint: disable=invalid-name
+        """Definiuje typy wejściowe dla węzła."""
+        return {
+            "required": {
+                "dataframe": ("DATAFRAME",),  # Oryginalny DataFrame
+                "predictions": ("PREDICTIONS",),  # Predykcje (0/1)
+                "probabilities": ("PROBABILITIES",),  # Prawdopodobieństwa
+                "output_path": ("STRING", {"default": "output/predictions.csv"}),  # Ścieżka wyjściowa
+                "sequence_column": ("STRING", {"default": "Peptide Sequence"}),  # Kolumna z sekwencjami
+            },
+        }
+
+    def save_predictions(
+        self, dataframe: pd.DataFrame, predictions, probabilities, output_path: str, sequence_column: str
+    ) -> dict:
+        """Zapisuje predykcje do CSV."""
+        save_predictions_to_csv(dataframe, predictions, probabilities, output_path, sequence_column)
+        return {}
+
+
 # Mapowanie klas węzłów dla ComfyUI
 NODE_CLASS_MAPPINGS = {
     "LoadCSVNode": LoadCSVNode,
@@ -504,6 +664,11 @@ NODE_CLASS_MAPPINGS = {
     "VectorizeSequencesNode": VectorizeSequencesNode,
     "TrainRandomForestNode": TrainRandomForestNode,
     "SaveCSVNode": SaveCSVNode,
+    # Prediction nodes
+    "VectorizeSequencesForPredictionNode": VectorizeSequencesForPredictionNode,
+    "LoadModelNode": LoadModelNode,
+    "PredictNode": PredictNode,
+    "SavePredictionsNode": SavePredictionsNode,
 }
 
 # Mapowanie nazw wyświetlanych w UI
@@ -523,4 +688,9 @@ NODE_DISPLAY_NAME_MAPPINGS = {
     "VectorizeSequencesNode": "Vectorize Sequences (Global Descriptors)",
     "TrainRandomForestNode": "Train Random Forest Classifier",
     "SaveCSVNode": "Save CSV Data",
+    # Prediction nodes
+    "VectorizeSequencesForPredictionNode": "Vectorize Sequences for Prediction",
+    "LoadModelNode": "Load Model Pipeline",
+    "PredictNode": "Predict with Model",
+    "SavePredictionsNode": "Save Predictions",
 }

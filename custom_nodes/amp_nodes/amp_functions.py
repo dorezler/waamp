@@ -52,6 +52,48 @@ AMINO_ACID_WEIGHTS = {
 STANDARD_AMINO_ACIDS = "ACDEFGHIKLMNPQRSTVWY"
 
 
+# Pomocnicze funkcje walidacyjne
+def _validate_column_exists(dataframe: pd.DataFrame, column_name: str, param_name: str = "column") -> None:
+    """Waliduje czy kolumna istnieje w DataFrame."""
+    if not column_name:
+        raise ValueError(f"No {param_name} provided. Please specify a {param_name} name.")
+    if column_name not in dataframe.columns:
+        raise ValueError(
+            f"Column '{column_name}' not found in DataFrame. Available columns: {list(dataframe.columns)}."
+        )
+
+
+def _validate_columns_exist(dataframe: pd.DataFrame, columns: dict[str, str]) -> None:
+    """Waliduje czy wiele kolumn istnieje w DataFrame.
+
+    Args:
+        dataframe: DataFrame do sprawdzenia
+        columns: Dict {nazwa_parametru: nazwa_kolumny}
+    """
+    for param_name, column_name in columns.items():
+        if not column_name:
+            raise ValueError(f"No {param_name} provided. Please specify a {param_name} name.")
+
+    for param_name, column_name in columns.items():
+        if column_name not in dataframe.columns:
+            raise ValueError(
+                f"Column '{column_name}' ({param_name}) not found in DataFrame. "
+                f"Available columns: {list(dataframe.columns)}."
+            )
+
+
+def _validate_non_empty(value: str, param_name: str) -> None:
+    """Waliduje czy wartość nie jest pusta."""
+    if not value:
+        raise ValueError(f"No {param_name} provided. Please specify a {param_name}.")
+
+
+def _validate_strategy(strategy: str, valid_strategies: list[str], param_name: str = "strategy") -> None:
+    """Waliduje czy strategia jest poprawna."""
+    if strategy not in valid_strategies:
+        raise ValueError(f"Invalid {param_name}: {strategy}. Must be one of {valid_strategies}.")
+
+
 def _apply_range_strategy(num1: float, num2: float, strategy: str) -> float:
     """Zastosuj strategię do zakresu wartości."""
     strategy_map = {
@@ -150,16 +192,9 @@ def aggregate_duplicates(dataframe: pd.DataFrame, key_column: str, strategy: str
         DataFrame z zagregowanymi duplikatami
     """
     key_column = key_column.strip()
-    # Walidacja: sprawdź czy key_column nie jest pusty
-    if not key_column:
-        raise ValueError("No key column provided. Please specify a key column for aggregation.")
-    # Walidacja: sprawdź czy kolumna istnieje
-    if key_column not in dataframe.columns:
-        raise ValueError(f"Column '{key_column}' not found in DataFrame. Available columns: {list(dataframe.columns)}.")
-    # Walidacja: sprawdź strategię
-    valid_strategies = ["min", "max", "mean", "median", "first"]
-    if strategy not in valid_strategies:
-        raise ValueError(f"Invalid strategy: {strategy}. Must be one of {valid_strategies}.")
+    _validate_column_exists(dataframe, key_column, "key column")
+    _validate_strategy(strategy, ["min", "max", "mean", "median", "first"])
+
     # Agreguj duplikaty
     aggregated_df = dataframe.groupby(key_column, as_index=False).agg(strategy)
     # Przygotuj info do logów
@@ -171,18 +206,8 @@ def aggregate_duplicates(dataframe: pd.DataFrame, key_column: str, strategy: str
 def clean_activity_values(dataframe: pd.DataFrame, column_name: str, range_strategy: str = "mean") -> pd.DataFrame:
     """Czyści kolumnę Activity - obsługuje zakresy, nierówności, konwertuje do float."""
     column_name = column_name.strip()
-    # Walidacja: sprawdź czy column_name nie jest pusty
-    if not column_name:
-        raise ValueError("No column name provided. Please specify a column name to clean activity values.")
-    # Walidacja: sprawdź czy kolumna istnieje
-    if column_name not in dataframe.columns:
-        raise ValueError(
-            f"Column '{column_name}' not found in DataFrame. Available columns: {list(dataframe.columns)}."
-        )
-    # Walidacja: sprawdź strategię dla zakresów
-    valid_strategies = ["min", "max", "mean", "median"]
-    if range_strategy not in valid_strategies:
-        raise ValueError(f"Invalid range_strategy: {range_strategy}. Must be one of {valid_strategies}.")
+    _validate_column_exists(dataframe, column_name, "column")
+    _validate_strategy(range_strategy, ["min", "max", "mean", "median"], "range_strategy")
     # Zastosuj funkcję czyszczącą
     cleaned_df = dataframe.copy()
     cleaned_df[column_name] = cleaned_df[column_name].apply(lambda x: _parse_activity_value(x, range_strategy))
@@ -208,20 +233,11 @@ def convert_to_binary_classification(
     """
     activity_column = activity_column.strip()
     output_column = output_column.strip()
-    # Walidacja: sprawdź czy activity_column nie jest pusty
-    if not activity_column:
-        raise ValueError("No activity column provided. Please specify an activity column name.")
-    # Walidacja: sprawdź czy kolumna istnieje
-    if activity_column not in dataframe.columns:
-        raise ValueError(
-            f"Column '{activity_column}' not found in DataFrame. Available columns: {list(dataframe.columns)}."
-        )
+    _validate_column_exists(dataframe, activity_column, "activity column")
+    _validate_non_empty(output_column, "output column name")
     # Walidacja: sprawdź threshold
     if threshold <= 0:
         raise ValueError(f"Invalid threshold: {threshold}. Must be > 0.")
-    # Walidacja: sprawdź czy output_column nie jest pusty
-    if not output_column:
-        raise ValueError("No output column name provided. Please specify an output column name.")
     # Konwersja do klasyfikacji binarnej: <= threshold -> 1 (aktywny), > threshold -> 0 (nieaktywny)
     classified_df = dataframe.copy()
     classified_df[output_column] = (classified_df[activity_column] <= threshold).astype(int)
@@ -245,19 +261,16 @@ def convert_units(
     unit_column = unit_column.strip()
     activity_column = activity_column.strip()
     target_unit = target_unit.strip()
-    # Walidacja: sprawdź czy kolumny nie są puste
-    if not sequence_column or not unit_column or not activity_column or not target_unit:
-        raise ValueError("All column names and target unit must be provided.")
-    # Walidacja: sprawdź czy kolumny istnieją
-    for col_name in [sequence_column, unit_column, activity_column]:
-        if col_name not in dataframe.columns:
-            raise ValueError(
-                f"Column '{col_name}' not found in DataFrame. Available columns: {list(dataframe.columns)}."
-            )
-    # Walidacja: sprawdź target_unit
-    valid_units = ["µM", "µg/ml"]
-    if target_unit not in valid_units:
-        raise ValueError(f"Invalid target_unit: {target_unit}. Must be one of {valid_units}.")
+    _validate_columns_exist(
+        dataframe,
+        {
+            "sequence_column": sequence_column,
+            "unit_column": unit_column,
+            "activity_column": activity_column,
+        },
+    )
+    _validate_non_empty(target_unit, "target unit")
+    _validate_strategy(target_unit, ["µM", "µg/ml"], "target_unit")
     converted_df = dataframe.copy()
     # Oblicz masy cząsteczkowe dla wszystkich peptydów
     converted_df["_mw"] = converted_df[sequence_column].apply(_calculate_molecular_weight)
@@ -281,14 +294,7 @@ def convert_units(
 def drop_na_in_column(dataframe: pd.DataFrame, column_name: str) -> pd.DataFrame:
     """Usuwa wiersze z pustymi wartościami w wybranej kolumnie."""
     column_name = column_name.strip()
-    # Walidacja: sprawdź czy column_name nie jest pusty
-    if not column_name:
-        raise ValueError("No column name provided. Please specify a column name to drop NA values from.")
-    # Walidacja: sprawdź czy kolumna istnieje
-    if column_name not in dataframe.columns:
-        raise ValueError(
-            f"Column '{column_name}' not found in DataFrame. Available columns: {list(dataframe.columns)}."
-        )
+    _validate_column_exists(dataframe, column_name, "column")
     # Usuń wiersze z NA w kolumnie
     cleaned_df = dataframe.dropna(subset=column_name).copy()
     # Przygotuj info do logów
@@ -300,14 +306,7 @@ def drop_na_in_column(dataframe: pd.DataFrame, column_name: str) -> pd.DataFrame
 def filter_standard_amino_acids(dataframe: pd.DataFrame, column_name: str) -> pd.DataFrame:
     """Usuwa wiersze zawierające niestandardowe aminokwasy (x, X, małe litery)."""
     column_name = column_name.strip()
-    # Walidacja: sprawdź czy column_name nie jest pusty
-    if not column_name:
-        raise ValueError("No column name provided. Please specify a column name to filter standard amino acids.")
-    # Walidacja: sprawdź czy kolumna istnieje
-    if column_name not in dataframe.columns:
-        raise ValueError(
-            f"Column '{column_name}' not found in DataFrame. Available columns: {list(dataframe.columns)}."
-        )
+    _validate_column_exists(dataframe, column_name, "column")
     # Filtruj tylko standardowe aminokwasy
     pattern = re.compile(f"^[{STANDARD_AMINO_ACIDS}]+$")
     mask = dataframe[column_name].astype(str).str.match(pattern, na=False)
@@ -322,17 +321,8 @@ def filter_column_by_regex(dataframe: pd.DataFrame, column_name: str, pattern: s
     """Filtruje wiersze DataFrame po zawartości kolumny z użyciem wyrażenia regularnego."""
     pattern = pattern.strip()
     column_name = column_name.strip()
-    # Walidacja: sprawdź czy column_name nie jest pusty
-    if not column_name:
-        raise ValueError("No column name provided. Please specify a column name to filter by.")
-    # Walidacja: sprawdź czy pattern nie jest pusty
-    if not pattern:
-        raise ValueError("No pattern provided. Please specify a regex pattern to filter by.")
-    # Walidacja: sprawdź czy kolumna istnieje
-    if column_name not in dataframe.columns:
-        raise ValueError(
-            f"Column '{column_name}' not found in DataFrame. Available columns: {list(dataframe.columns)}."
-        )
+    _validate_column_exists(dataframe, column_name, "column")
+    _validate_non_empty(pattern, "pattern")
     # Walidacja: sprawdź czy pattern jest poprawnym wyrażeniem regularnym
     try:
         compiled_pattern = re.compile(pattern)
@@ -350,9 +340,7 @@ def filter_column_by_regex(dataframe: pd.DataFrame, column_name: str, pattern: s
 def load_csv_file(csv_path: str) -> pd.DataFrame:
     """Wczytuje dane z pliku CSV do DataFrame."""
     csv_path = csv_path.strip()
-    # Walidacja: sprawdź czy ścieżka nie jest pusta
-    if not csv_path:
-        raise ValueError("No CSV file path provided. Please specify a path to a CSV file.")
+    _validate_non_empty(csv_path, "CSV file path")
     # Walidacja: sprawdź czy plik istnieje
     if not os.path.exists(csv_path):
         raise FileNotFoundError(f"CSV file not found: {csv_path}.")
@@ -367,14 +355,7 @@ def load_csv_file(csv_path: str) -> pd.DataFrame:
 def round_column_values(dataframe: pd.DataFrame, column_name: str, decimal_places: int = 2) -> pd.DataFrame:
     """Zaokrągla wartości numeryczne w kolumnie do określonej liczby miejsc po przecinku."""
     column_name = column_name.strip()
-    # Walidacja: sprawdź czy column_name nie jest pusty
-    if not column_name:
-        raise ValueError("No column name provided. Please specify a column name to round values.")
-    # Walidacja: sprawdź czy kolumna istnieje
-    if column_name not in dataframe.columns:
-        raise ValueError(
-            f"Column '{column_name}' not found in DataFrame. Available columns: {list(dataframe.columns)}."
-        )
+    _validate_column_exists(dataframe, column_name, "column")
     # Walidacja: sprawdź decimal_places
     if decimal_places < 0:
         raise ValueError(f"Invalid decimal_places: {decimal_places}. Must be >= 0.")
@@ -392,9 +373,7 @@ def save_csv_file(
 ) -> None:
     """Zapisuje DataFrame do pliku CSV."""
     output_path = output_path.strip()
-    # Walidacja: sprawdź czy ścieżka nie jest pusta
-    if not output_path:
-        raise ValueError("No output path provided. Please specify a path to save the CSV file.")
+    _validate_non_empty(output_path, "output path")
     # Walidacja: sprawdź czy DataFrame nie jest pusty
     if dataframe.empty:
         raise ValueError("Cannot save empty DataFrame. Please provide a DataFrame with data.")
@@ -627,16 +606,7 @@ def vectorize_sequences_esm2(  # pylint: disable=too-many-locals
     """
     sequence_column = sequence_column.strip()
     label_column = label_column.strip()
-
-    # Walidacja: sprawdź czy kolumny nie są puste
-    if not sequence_column or not label_column:
-        raise ValueError("Both sequence_column and label_column must be provided.")
-    # Walidacja: sprawdź czy kolumny istnieją
-    for col_name in [sequence_column, label_column]:
-        if col_name not in dataframe.columns:
-            raise ValueError(
-                f"Column '{col_name}' not found in DataFrame. Available columns: {list(dataframe.columns)}."
-            )
+    _validate_columns_exist(dataframe, {"sequence_column": sequence_column, "label_column": label_column})
 
     # Dynamiczny import - tylko gdy funkcja jest wywoływana
     try:
@@ -720,16 +690,7 @@ def vectorize_sequences_aa_composition(  # pylint: disable=too-many-locals
     """
     sequence_column = sequence_column.strip()
     label_column = label_column.strip()
-
-    # Walidacja: sprawdź czy kolumny nie są puste
-    if not sequence_column or not label_column:
-        raise ValueError("Both sequence_column and label_column must be provided.")
-    # Walidacja: sprawdź czy kolumny istnieją
-    for col_name in [sequence_column, label_column]:
-        if col_name not in dataframe.columns:
-            raise ValueError(
-                f"Column '{col_name}' not found in DataFrame. Available columns: {list(dataframe.columns)}."
-            )
+    _validate_columns_exist(dataframe, {"sequence_column": sequence_column, "label_column": label_column})
 
     # Pobierz sekwencje i labelki
     sequences = dataframe[sequence_column].tolist()
@@ -794,16 +755,7 @@ def vectorize_sequences(dataframe: pd.DataFrame, sequence_column: str, label_col
     """
     sequence_column = sequence_column.strip()
     label_column = label_column.strip()
-
-    # Walidacja: sprawdź czy kolumny nie są puste
-    if not sequence_column or not label_column:
-        raise ValueError("Both sequence_column and label_column must be provided.")
-    # Walidacja: sprawdź czy kolumny istnieją
-    for col_name in [sequence_column, label_column]:
-        if col_name not in dataframe.columns:
-            raise ValueError(
-                f"Column '{col_name}' not found in DataFrame. Available columns: {list(dataframe.columns)}."
-            )
+    _validate_columns_exist(dataframe, {"sequence_column": sequence_column, "label_column": label_column})
 
     # Pobierz sekwencje i labelki
     sequences = dataframe[sequence_column].tolist()
@@ -835,3 +787,182 @@ def vectorize_sequences(dataframe: pd.DataFrame, sequence_column: str, label_col
         vectorized_data.mean(),
     )
     return vectorized_data
+
+
+def vectorize_sequences_for_prediction(  # pylint: disable=too-many-locals,too-many-statements
+    dataframe: pd.DataFrame, sequence_column: str, vectorizer: str = "global"
+) -> np.ndarray:
+    """Wektoryzuje sekwencje peptydów do predykcji (bez kolumny label).
+
+    Args:
+        dataframe: DataFrame z sekwencjami peptydów
+        sequence_column: Nazwa kolumny z sekwencjami peptydów
+        vectorizer: Typ wektoryzera: "global", "aa_composition", "esm2"
+
+    Returns:
+        Numpy array 2D: [features...] - tylko cechy, bez labelek
+    """
+    sequence_column = sequence_column.strip()
+    _validate_column_exists(dataframe, sequence_column, "sequence column")
+    _validate_strategy(vectorizer, ["global", "aa_composition", "esm2"], "vectorizer")
+
+    # Pobierz sekwencje
+    sequences = dataframe[sequence_column].tolist()
+
+    if vectorizer == "global":
+        # Global descriptors (modlamp)
+        descriptor = GlobalDescriptor(sequences)
+        descriptor.calculate_all()
+        features = descriptor.descriptor
+        logger.info("Vectorized %d sequences using GlobalDescriptor (10 features)", len(sequences))
+
+    elif vectorizer == "aa_composition":
+        # AA Composition (20 features)
+        aa_order = sorted(STANDARD_AMINO_ACIDS)
+        composition_matrix = []
+        for seq in sequences:
+            seq = str(seq).strip().upper()
+            seq_len = len(seq)
+            if seq_len == 0:
+                composition = [0.0] * 20
+            else:
+                composition = []
+                for aa in aa_order:
+                    count = seq.count(aa)
+                    percentage = (count / seq_len) * 100.0
+                    composition.append(percentage)
+            composition_matrix.append(composition)
+        features = np.array(composition_matrix, dtype=np.float64)
+        logger.info("Vectorized %d sequences using AA Composition (20 features)", len(sequences))
+
+    else:  # esm2
+        # ESM2 embeddings (320 features)
+        try:
+            import torch  # pylint: disable=import-outside-toplevel
+            from transformers import AutoModel, AutoTokenizer  # pylint: disable=import-outside-toplevel
+        except ImportError as e:
+            raise ImportError(
+                "ESM2 requires 'transformers' and 'torch'. Install with: pip install transformers torch"
+            ) from e
+
+        model_name = "facebook/esm2_t6_8M_UR50D"
+        logger.info("Loading ESM2 model: %s", model_name)
+        tokenizer = AutoTokenizer.from_pretrained(model_name)
+        model = AutoModel.from_pretrained(model_name)
+        model.eval()
+
+        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        model = model.to(device)
+        logger.info("Using device: %s", device)
+
+        embeddings_list = []
+        with torch.no_grad():
+            for seq in sequences:
+                seq = str(seq).strip().upper()
+                inputs = tokenizer(seq, return_tensors="pt", padding=True, truncation=True, max_length=1024)
+                inputs = {k: v.to(device) for k, v in inputs.items()}
+                outputs = model(**inputs)
+                embeddings = outputs.last_hidden_state.mean(dim=1)
+                embeddings_list.append(embeddings.cpu().numpy().squeeze())
+
+        features = np.array(embeddings_list, dtype=np.float32)
+        logger.info("Vectorized %d sequences using ESM2-t6-8M (320 features)", len(sequences))
+
+    logger.info("Feature shape: %s", features.shape)
+    logger.info("First 3 rows (first 5 dims):\n%s", features[:3, :5])
+    logger.info("Data statistics - min: %.3f, max: %.3f, mean: %.3f", features.min(), features.max(), features.mean())
+
+    return features
+
+
+def load_model_pipeline(pipeline_path: str):
+    """Ładuje zapisany sklearn Pipeline z pliku .pkl.
+
+    Args:
+        pipeline_path: Ścieżka do pliku pipeline.pkl
+
+    Returns:
+        Załadowany sklearn Pipeline (StandardScaler + RandomForestClassifier)
+    """
+    pipeline_path = pipeline_path.strip()
+    _validate_non_empty(pipeline_path, "pipeline path")
+    # Walidacja: sprawdź czy plik istnieje
+    if not os.path.exists(pipeline_path):
+        raise FileNotFoundError(f"Pipeline file not found: {pipeline_path}")
+
+    # Wczytaj pipeline
+    with open(pipeline_path, "rb") as f:
+        pipeline = pickle.load(f)
+
+    logger.info("Loaded model pipeline from: %s", pipeline_path)
+    return pipeline
+
+
+def predict_with_pipeline(pipeline, features: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+    """Wykonuje predykcję używając załadowanego pipeline.
+
+    Args:
+        pipeline: Załadowany sklearn Pipeline
+        features: Numpy array 2D z cechami [n_samples, n_features]
+
+    Returns:
+        Tuple (predictions, probabilities):
+        - predictions: Numpy array 1D z predykcjami (0/1)
+        - probabilities: Numpy array 2D z prawdopodobieństwami [n_samples, 2]
+    """
+    # Walidacja: sprawdź wymiary
+    if features.size == 0:
+        raise ValueError("Cannot predict on empty data.")
+    if len(features.shape) != 2:
+        raise ValueError(f"Expected 2D array, got shape {features.shape}.")
+
+    # Predykcja
+    predictions = pipeline.predict(features)
+    probabilities = pipeline.predict_proba(features)
+
+    logger.info("Predicted %d samples", len(predictions))
+    logger.info("Predictions - Active (1): %d, Inactive (0): %d", (predictions == 1).sum(), (predictions == 0).sum())
+
+    return predictions, probabilities
+
+
+def save_predictions_to_csv(
+    dataframe: pd.DataFrame,
+    predictions: np.ndarray,
+    probabilities: np.ndarray,
+    output_path: str,
+    sequence_column: str = "Peptide Sequence",
+) -> None:
+    """Zapisuje predykcje do pliku CSV.
+
+    Args:
+        dataframe: Oryginalny DataFrame z sekwencjami
+        predictions: Numpy array z predykcjami (0/1)
+        probabilities: Numpy array z prawdopodobieństwami [n_samples, 2]
+        output_path: Ścieżka do pliku wyjściowego CSV
+        sequence_column: Nazwa kolumny z sekwencjami
+    """
+    output_path = output_path.strip()
+    sequence_column = sequence_column.strip()
+    _validate_non_empty(output_path, "output path")
+    _validate_column_exists(dataframe, sequence_column, "sequence column")
+    # Walidacja: sprawdź długość predykcji
+    if len(predictions) != len(dataframe):
+        raise ValueError(f"Predictions length ({len(predictions)}) does not match DataFrame length ({len(dataframe)}).")
+
+    # Utwórz DataFrame z wynikami
+    results_df = dataframe[[sequence_column]].copy()
+    results_df["Predicted_Label"] = predictions
+    results_df["Probability_Inactive"] = probabilities[:, 0]
+    results_df["Probability_Active"] = probabilities[:, 1]
+
+    # Utwórz katalog jeśli nie istnieje
+    output_dir = os.path.dirname(output_path)
+    if output_dir and not os.path.exists(output_dir):
+        os.makedirs(output_dir, exist_ok=True)
+
+    # Zapisz do CSV
+    results_df.to_csv(output_path, index=False)
+
+    logger.info("Saved predictions to: %s", output_path)
+    logger.info("Results shape: %s, Columns: %s", results_df.shape, list(results_df.columns))
