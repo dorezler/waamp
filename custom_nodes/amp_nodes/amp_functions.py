@@ -2,11 +2,26 @@
 
 import logging
 import os
+import pickle
 import re
 
+import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 from modlamp.descriptors import GlobalDescriptor
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.metrics import (
+    ConfusionMatrixDisplay,
+    accuracy_score,
+    classification_report,
+    confusion_matrix,
+    f1_score,
+    precision_score,
+    recall_score,
+)
+from sklearn.model_selection import train_test_split
+from sklearn.pipeline import Pipeline
+from sklearn.preprocessing import StandardScaler
 
 logger = logging.getLogger(__name__)
 
@@ -427,6 +442,168 @@ def select_columns(dataframe: pd.DataFrame, columns: list[str]) -> pd.DataFrame:
     logger.info("Selected columns: %s.", columns)
     logger.info("Shape before: %s, after: %s.", dataframe.shape, selected_df.shape)
     return selected_df
+
+
+def train_random_forest_classifier(  # pylint: disable=too-many-arguments,too-many-positional-arguments,too-many-locals,too-many-statements
+    vectorized_data: np.ndarray,
+    output_dir: str = "output/models",
+    model_name: str = "rf_classifier",
+    test_size: float = 0.2,
+    random_state: int = 42,
+    n_estimators: int = 100,
+    max_depth: int | None = None,
+) -> dict:
+    """Trenuje klasyfikator Random Forest na zwektoryzowanych danych peptydów.
+
+    Pipeline:
+    1. Podział train-test (80:20)
+    2. sklearn.Pipeline: StandardScaler → Random Forest
+    3. Ewaluacja na zbiorze testowym
+    4. Zapis: pipeline.pkl, report.txt, confusion_matrix.png
+
+    Args:
+        vectorized_data: Numpy array 2D [features..., label] z vectorize_sequences()
+        output_dir: Katalog wyjściowy dla modelu i raportów
+        model_name: Nazwa bazowa dla plików (bez rozszerzenia)
+        test_size: Proporcja zbioru testowego (0.0-1.0)
+        random_state: Seed dla powtarzalności
+        n_estimators: Liczba drzew w Random Forest
+        max_depth: Maksymalna głębokość drzew (None = bez limitu)
+
+    Returns:
+        Dict z metrykami: accuracy, precision, recall, f1, confusion_matrix
+    """
+    # Walidacja: sprawdź czy vectorized_data nie jest pusty
+    if vectorized_data.size == 0:
+        raise ValueError("Cannot train on empty data. Please provide vectorized data.")
+    # Walidacja: sprawdź wymiary
+    if len(vectorized_data.shape) != 2:
+        raise ValueError(f"Expected 2D array, got shape {vectorized_data.shape}.")
+    # Walidacja: sprawdź test_size
+    if not 0.0 < test_size < 1.0:
+        raise ValueError(f"Invalid test_size: {test_size}. Must be between 0.0 and 1.0.")
+
+    # Utwórz katalog wyjściowy jeśli nie istnieje
+    os.makedirs(output_dir, exist_ok=True)
+
+    # Rozdziel cechy (X) i etykiety (y)
+    X = vectorized_data[:, :-1]  # pylint: disable=invalid-name  # Wszystkie kolumny oprócz ostatniej
+    y = vectorized_data[:, -1].astype(int)  # Ostatnia kolumna jako int
+
+    # Podział train-test
+    X_train, X_test, y_train, y_test = train_test_split(  # pylint: disable=invalid-name
+        X, y, test_size=test_size, random_state=random_state
+    )
+
+    # Stwórz Pipeline: StandardScaler → RandomForest
+    pipeline = Pipeline(
+        [
+            ("scaler", StandardScaler()),
+            (
+                "classifier",
+                RandomForestClassifier(
+                    n_estimators=n_estimators, max_depth=max_depth, random_state=random_state, n_jobs=-1
+                ),
+            ),
+        ]
+    )
+
+    # Trenuj pipeline
+    pipeline.fit(X_train, y_train)
+
+    # Predykcja na zbiorze testowym
+    y_pred = pipeline.predict(X_test)
+
+    # Oblicz metryki
+    accuracy = accuracy_score(y_test, y_pred)
+    precision = precision_score(y_test, y_pred, zero_division=0)
+    recall = recall_score(y_test, y_pred, zero_division=0)
+    f1 = f1_score(y_test, y_pred, zero_division=0)
+    conf_matrix = confusion_matrix(y_test, y_pred)
+    class_report = classification_report(y_test, y_pred, zero_division=0)
+
+    # Przygotuj ścieżki do plików
+    pipeline_path = os.path.join(output_dir, f"{model_name}_pipeline.pkl")
+    report_path = os.path.join(output_dir, f"{model_name}_report.txt")
+    confusion_matrix_path = os.path.join(output_dir, f"{model_name}_confusion_matrix.png")
+
+    # Zapisz pipeline (scaler + model w jednym obiekcie)
+    with open(pipeline_path, "wb") as f:
+        pickle.dump(pipeline, f)
+
+    # Zapisz raport z metrykami
+    with open(report_path, "w", encoding="utf-8") as f:
+        f.write("=" * 80 + "\n")
+        f.write("RANDOM FOREST CLASSIFIER - EVALUATION REPORT\n")
+        f.write("=" * 80 + "\n\n")
+        f.write(f"Model: {model_name}\n")
+        f.write("Random Forest Parameters:\n")
+        f.write(f"  - n_estimators: {n_estimators}\n")
+        f.write(f"  - max_depth: {max_depth}\n")
+        f.write(f"  - random_state: {random_state}\n\n")
+        f.write("Dataset Split:\n")
+        f.write(f"  - Train size: {len(X_train)} samples\n")
+        f.write(f"  - Test size: {len(X_test)} samples\n")
+        f.write(f"  - Test ratio: {test_size:.1%}\n\n")
+        f.write("Feature Information:\n")
+        f.write(f"  - Number of features: {X.shape[1]}\n")
+        f.write("  - Pipeline: StandardScaler → RandomForestClassifier\n\n")
+        f.write("=" * 80 + "\n")
+        f.write("METRICS\n")
+        f.write("=" * 80 + "\n")
+        f.write(f"Accuracy:  {accuracy:.4f}\n")
+        f.write(f"Precision: {precision:.4f}\n")
+        f.write(f"Recall:    {recall:.4f}\n")
+        f.write(f"F1 Score:  {f1:.4f}\n\n")
+        f.write("=" * 80 + "\n")
+        f.write("CLASSIFICATION REPORT\n")
+        f.write("=" * 80 + "\n")
+        f.write(class_report)
+        f.write("\n\n")
+        f.write("=" * 80 + "\n")
+        f.write("CONFUSION MATRIX\n")
+        f.write("=" * 80 + "\n\n")
+        f.write(f"True Negatives (TN):  {conf_matrix[0, 0]}\n")
+        f.write(f"False Positives (FP): {conf_matrix[0, 1]}\n")
+        f.write(f"False Negatives (FN): {conf_matrix[1, 0]}\n")
+        f.write(f"True Positives (TP):  {conf_matrix[1, 1]}\n")
+
+    # Wygeneruj wykres macierzy pomyłek
+    fig, ax = plt.subplots(figsize=(8, 6))
+
+    # Użyj ConfusionMatrixDisplay dla ładnego wykresu
+    disp = ConfusionMatrixDisplay(confusion_matrix=conf_matrix, display_labels=["Inactive (0)", "Active (1)"])
+    disp.plot(ax=ax, cmap="Blues", values_format="d")
+
+    # Dodaj tytuł i metryki
+    ax.set_title(f"Confusion Matrix - {model_name}\nAccuracy: {accuracy:.4f} | F1: {f1:.4f}", fontsize=12, pad=20)
+
+    # Zapisz wykres
+    plt.tight_layout()
+    plt.savefig(confusion_matrix_path, dpi=150, bbox_inches="tight")
+    plt.close(fig)
+
+    # Przygotuj info do logów
+    logger.info("Trained Random Forest classifier with %d estimators", n_estimators)
+    logger.info("Train size: %d, Test size: %d (%.1f%%)", len(X_train), len(X_test), test_size * 100)
+    logger.info(
+        "Test Metrics - Accuracy: %.4f, Precision: %.4f, Recall: %.4f, F1: %.4f", accuracy, precision, recall, f1
+    )
+    logger.info("Saved pipeline: %s", pipeline_path)
+    logger.info("Saved report: %s", report_path)
+    logger.info("Saved confusion matrix plot: %s", confusion_matrix_path)
+
+    # Zwróć metryki
+    return {
+        "accuracy": accuracy,
+        "precision": precision,
+        "recall": recall,
+        "f1": f1,
+        "confusion_matrix": conf_matrix.tolist(),
+        "pipeline_path": pipeline_path,
+        "report_path": report_path,
+        "confusion_matrix_path": confusion_matrix_path,
+    }
 
 
 def vectorize_sequences(dataframe: pd.DataFrame, sequence_column: str, label_column: str) -> np.ndarray:

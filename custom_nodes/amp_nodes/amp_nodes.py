@@ -18,6 +18,7 @@ from .amp_functions import (
     round_column_values,
     save_csv_file,
     select_columns,
+    train_random_forest_classifier,
     vectorize_sequences,
 )
 
@@ -336,6 +337,61 @@ class SelectColumnsNode:
         return (selected_df,)
 
 
+class TrainRandomForestNode:
+    """Węzeł do trenowania klasyfikatora Random Forest.
+
+    Pipeline: train-test split (80:20) → StandardScaler → Random Forest → evaluation
+    Outputy: model.pkl, scaler.pkl, report.txt, confusion_matrix.txt
+    """
+
+    # Stałe klasowe definiujące interfejs węzła
+    RETURN_TYPES = ()  # Brak outputów
+    FUNCTION = "train_model"  # Nazwa funkcji do wywołania
+    CATEGORY = "AMP Research/Machine Learning"  # Kategoria w menu ComfyUI
+    OUTPUT_NODE = True  # Oznacz jako węzeł wyjściowy (końcowy w workflow)
+
+    @classmethod
+    def INPUT_TYPES(cls) -> dict:  # pylint: disable=invalid-name
+        """Definiuje typy wejściowe dla węzła."""
+        return {
+            "required": {
+                "vectorized_data": ("NUMPY_ARRAY",),  # Numpy array z VectorizeSequencesNode
+                "output_dir": ("STRING", {"default": "output/models"}),  # Katalog wyjściowy
+                "model_name": ("STRING", {"default": "rf_classifier"}),  # Nazwa modelu
+                "test_size": ("FLOAT", {"default": 0.2, "min": 0.05, "max": 0.5, "step": 0.05}),  # Test split
+                "n_estimators": ("INT", {"default": 100, "min": 10, "max": 500, "step": 10}),  # Liczba drzew
+                "max_depth": ("INT", {"default": 0, "min": 0, "max": 100, "step": 1}),  # Głębokość (0=None)
+                "random_state": ("INT", {"default": 42}),  # Seed
+            },
+        }
+
+    def train_model(  # pylint: disable=too-many-arguments,too-many-positional-arguments
+        self,
+        vectorized_data,
+        output_dir: str,
+        model_name: str,
+        test_size: float,
+        n_estimators: int,
+        max_depth: int,
+        random_state: int,
+    ) -> dict:
+        """Trenuje Random Forest i zapisuje model + raporty."""
+        # Konwertuj max_depth: 0 → None (bez limitu)
+        max_depth_value = None if max_depth == 0 else max_depth
+
+        # Trenuj model
+        train_random_forest_classifier(
+            vectorized_data=vectorized_data,
+            output_dir=output_dir,
+            model_name=model_name,
+            test_size=test_size,
+            random_state=random_state,
+            n_estimators=n_estimators,
+            max_depth=max_depth_value,
+        )
+        return {}
+
+
 class VectorizeSequencesNode:
     """Węzeł do wektoryzacji sekwencji peptydów używając modlamp GlobalDescriptor.
 
@@ -380,6 +436,7 @@ NODE_CLASS_MAPPINGS = {
     "AggregateDuplicatesNode": AggregateDuplicatesNode,
     "ConvertToBinaryClassificationNode": ConvertToBinaryClassificationNode,
     "VectorizeSequencesNode": VectorizeSequencesNode,
+    "TrainRandomForestNode": TrainRandomForestNode,
     "SaveCSVNode": SaveCSVNode,
 }
 
@@ -396,5 +453,6 @@ NODE_DISPLAY_NAME_MAPPINGS = {
     "AggregateDuplicatesNode": "Aggregate Duplicates",
     "ConvertToBinaryClassificationNode": "Convert to Binary Classification",
     "VectorizeSequencesNode": "Vectorize Sequences",
+    "TrainRandomForestNode": "Train Random Forest Classifier",
     "SaveCSVNode": "Save CSV Data",
 }
