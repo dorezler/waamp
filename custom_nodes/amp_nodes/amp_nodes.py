@@ -20,6 +20,8 @@ from .amp_functions import (
     select_columns,
     train_random_forest_classifier,
     vectorize_sequences,
+    vectorize_sequences_aa_composition,
+    vectorize_sequences_esm2,
 )
 
 
@@ -392,6 +394,68 @@ class TrainRandomForestNode:
         return {}
 
 
+class VectorizeSequencesAACompositionNode:
+    """Węzeł do wektoryzacji sekwencji peptydów używając składu aminokwasowego (AA Composition).
+
+    Oblicza procentowy udział każdego z 20 standardowych aminokwasów w sekwencji.
+    Wektor ma 20 cech (A, C, D, E, F, G, H, I, K, L, M, N, P, Q, R, S, T, V, W, Y).
+    """
+
+    # Stałe klasowe definiujące interfejs węzła
+    RETURN_TYPES = ("NUMPY_ARRAY",)  # Zwraca numpy array
+    RETURN_NAMES = ("vectorized_data",)  # Nazwa outputu
+    FUNCTION = "vectorize"  # Nazwa funkcji do wywołania
+    CATEGORY = "AMP Research/Feature Engineering"  # Kategoria w menu ComfyUI
+    OUTPUT_NODE = True  # Oznacz jako węzeł wyjściowy - wymusza wykonanie
+
+    @classmethod
+    def INPUT_TYPES(cls) -> dict:  # pylint: disable=invalid-name
+        """Definiuje typy wejściowe dla węzła."""
+        return {
+            "required": {
+                "dataframe": ("DATAFRAME",),  # DataFrame z sekwencjami i labelkami
+                "sequence_column": ("STRING", {}),  # Kolumna z sekwencjami
+                "label_column": ("STRING", {}),  # Kolumna z labelkami
+            },
+        }
+
+    def vectorize(self, dataframe: pd.DataFrame, sequence_column: str, label_column: str) -> tuple:
+        """Wektoryzuje sekwencje peptydów do numpy array [20 features (AA composition)..., label]."""
+        vectorized_array = vectorize_sequences_aa_composition(dataframe, sequence_column, label_column)
+        return (vectorized_array,)
+
+
+class VectorizeSequencesESM2Node:
+    """Węzeł do wektoryzacji sekwencji peptydów używając ESM2 protein language model.
+
+    Używa ESM2-t6-8M (8M parametrów) do generowania embeddings.
+    Każda sekwencja jest reprezentowana jako wektor 320-wymiarowy (mean pooling).
+    """
+
+    # Stałe klasowe definiujące interfejs węzła
+    RETURN_TYPES = ("NUMPY_ARRAY",)  # Zwraca numpy array
+    RETURN_NAMES = ("vectorized_data",)  # Nazwa outputu
+    FUNCTION = "vectorize"  # Nazwa funkcji do wywołania
+    CATEGORY = "AMP Research/Feature Engineering"  # Kategoria w menu ComfyUI
+    OUTPUT_NODE = True  # Oznacz jako węzeł wyjściowy - wymusza wykonanie
+
+    @classmethod
+    def INPUT_TYPES(cls) -> dict:  # pylint: disable=invalid-name
+        """Definiuje typy wejściowe dla węzła."""
+        return {
+            "required": {
+                "dataframe": ("DATAFRAME",),  # DataFrame z sekwencjami i labelkami
+                "sequence_column": ("STRING", {}),  # Kolumna z sekwencjami
+                "label_column": ("STRING", {}),  # Kolumna z labelkami
+            },
+        }
+
+    def vectorize(self, dataframe: pd.DataFrame, sequence_column: str, label_column: str) -> tuple:
+        """Wektoryzuje sekwencje peptydów do numpy array [320 features (ESM2 embeddings)..., label]."""
+        vectorized_array = vectorize_sequences_esm2(dataframe, sequence_column, label_column)
+        return (vectorized_array,)
+
+
 class VectorizeSequencesNode:
     """Węzeł do wektoryzacji sekwencji peptydów używając modlamp GlobalDescriptor.
 
@@ -435,6 +499,8 @@ NODE_CLASS_MAPPINGS = {
     "SelectColumnsNode": SelectColumnsNode,
     "AggregateDuplicatesNode": AggregateDuplicatesNode,
     "ConvertToBinaryClassificationNode": ConvertToBinaryClassificationNode,
+    "VectorizeSequencesAACompositionNode": VectorizeSequencesAACompositionNode,
+    "VectorizeSequencesESM2Node": VectorizeSequencesESM2Node,
     "VectorizeSequencesNode": VectorizeSequencesNode,
     "TrainRandomForestNode": TrainRandomForestNode,
     "SaveCSVNode": SaveCSVNode,
@@ -452,7 +518,9 @@ NODE_DISPLAY_NAME_MAPPINGS = {
     "SelectColumnsNode": "Select Columns",
     "AggregateDuplicatesNode": "Aggregate Duplicates",
     "ConvertToBinaryClassificationNode": "Convert to Binary Classification",
-    "VectorizeSequencesNode": "Vectorize Sequences",
+    "VectorizeSequencesAACompositionNode": "Vectorize Sequences (AA Composition)",
+    "VectorizeSequencesESM2Node": "Vectorize Sequences (ESM2-8M)",
+    "VectorizeSequencesNode": "Vectorize Sequences (Global Descriptors)",
     "TrainRandomForestNode": "Train Random Forest Classifier",
     "SaveCSVNode": "Save CSV Data",
 }

@@ -486,6 +486,9 @@ def train_random_forest_classifier(  # pylint: disable=too-many-arguments,too-ma
     # Utwórz katalog wyjściowy jeśli nie istnieje
     os.makedirs(output_dir, exist_ok=True)
 
+    # Ustaw backend matplotlib na 'Agg' dla pracy w wątku roboczym
+    plt.switch_backend("Agg")
+
     # Rozdziel cechy (X) i etykiety (y)
     X = vectorized_data[:, :-1]  # pylint: disable=invalid-name  # Wszystkie kolumny oprócz ostatniej
     y = vectorized_data[:, -1].astype(int)  # Ostatnia kolumna jako int
@@ -604,6 +607,175 @@ def train_random_forest_classifier(  # pylint: disable=too-many-arguments,too-ma
         "report_path": report_path,
         "confusion_matrix_path": confusion_matrix_path,
     }
+
+
+def vectorize_sequences_esm2(  # pylint: disable=too-many-locals
+    dataframe: pd.DataFrame, sequence_column: str, label_column: str
+) -> np.ndarray:
+    """Wektoryzuje sekwencje peptydów używając ESM2 protein language model.
+
+    Używa ESM2-t6-8M (najmniejszy model, 8M parametrów) do generowania embeddings.
+    Każda sekwencja jest reprezentowana jako wektor 320-wymiarowy (mean pooling).
+
+    Args:
+        dataframe: DataFrame z sekwencjami i labelkami
+        sequence_column: Nazwa kolumny z sekwencjami peptydów
+        label_column: Nazwa kolumny z labelkami (0/1)
+
+    Returns:
+        Numpy array 2D: [320 features (ESM2 embeddings)..., label]
+    """
+    sequence_column = sequence_column.strip()
+    label_column = label_column.strip()
+
+    # Walidacja: sprawdź czy kolumny nie są puste
+    if not sequence_column or not label_column:
+        raise ValueError("Both sequence_column and label_column must be provided.")
+    # Walidacja: sprawdź czy kolumny istnieją
+    for col_name in [sequence_column, label_column]:
+        if col_name not in dataframe.columns:
+            raise ValueError(
+                f"Column '{col_name}' not found in DataFrame. Available columns: {list(dataframe.columns)}."
+            )
+
+    # Dynamiczny import - tylko gdy funkcja jest wywoływana
+    try:
+        import torch  # pylint: disable=import-outside-toplevel
+        from transformers import AutoModel, AutoTokenizer  # pylint: disable=import-outside-toplevel
+    except ImportError as e:
+        raise ImportError(
+            "ESM2 requires 'transformers' and 'torch'. Install with: pip install transformers torch"
+        ) from e
+
+    # Pobierz sekwencje i labelki
+    sequences = dataframe[sequence_column].tolist()
+    labels = dataframe[label_column].to_numpy().reshape(-1, 1)
+
+    # Załaduj model ESM2-t6-8M (najmniejszy, najszybszy)
+    model_name = "facebook/esm2_t6_8M_UR50D"
+    logger.info("Loading ESM2 model: %s", model_name)
+    tokenizer = AutoTokenizer.from_pretrained(model_name)
+    model = AutoModel.from_pretrained(model_name)
+    model.eval()  # Tryb ewaluacji (bez treningu)
+
+    # Ustaw urządzenie (CPU lub GPU jeśli dostępne)
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    model = model.to(device)
+    logger.info("Using device: %s", device)
+
+    # Generuj embeddings dla każdej sekwencji
+    embeddings_list = []
+    with torch.no_grad():  # Wyłącz gradient (oszczędność pamięci)
+        for seq in sequences:
+            seq = str(seq).strip().upper()
+            # Tokenizuj sekwencję
+            inputs = tokenizer(seq, return_tensors="pt", padding=True, truncation=True, max_length=1024)
+            inputs = {k: v.to(device) for k, v in inputs.items()}
+
+            # Przepuść przez model
+            outputs = model(**inputs)
+
+            # Pobierz embeddings z ostatniej warstwy (mean pooling po długości sekwencji)
+            # outputs.last_hidden_state shape: (batch_size=1, seq_len, hidden_size=320)
+            embeddings = outputs.last_hidden_state.mean(dim=1)  # Mean pooling: (1, 320)
+            embeddings_list.append(embeddings.cpu().numpy().squeeze())  # Konwertuj do numpy
+
+    # Konwertuj listę do numpy array
+    features = np.array(embeddings_list, dtype=np.float32)
+
+    # Połącz cechy z labelkami: [320 features..., label]
+    vectorized_data = np.hstack([features, labels])
+
+    # Przygotuj info do logów
+    logger.info(
+        "Vectorized %d sequences using ESM2-t6-8M (320-dim embeddings)",
+        len(sequences),
+    )
+    logger.info("Feature shape: %s, Final shape: %s", features.shape, vectorized_data.shape)
+    logger.info("First 3 rows of vectorized data (first 5 dims):\n%s", vectorized_data[:3, :5])
+    logger.info(
+        "Data statistics - min: %.3f, max: %.3f, mean: %.3f",
+        vectorized_data.min(),
+        vectorized_data.max(),
+        vectorized_data.mean(),
+    )
+    return vectorized_data
+
+
+def vectorize_sequences_aa_composition(  # pylint: disable=too-many-locals
+    dataframe: pd.DataFrame, sequence_column: str, label_column: str
+) -> np.ndarray:
+    """Wektoryzuje sekwencje peptydów do wektora składu aminokwasowego (amino acid composition).
+
+    Oblicza procentowy udział każdego z 20 standardowych aminokwasów w sekwencji.
+    Wektor ma 20 cech (A, C, D, E, F, G, H, I, K, L, M, N, P, Q, R, S, T, V, W, Y).
+
+    Args:
+        dataframe: DataFrame z sekwencjami i labelkami
+        sequence_column: Nazwa kolumny z sekwencjami peptydów
+        label_column: Nazwa kolumny z labelkami (0/1)
+
+    Returns:
+        Numpy array 2D: [20 features (AA composition)..., label] - każdy wiersz to 20 cech + labelka
+    """
+    sequence_column = sequence_column.strip()
+    label_column = label_column.strip()
+
+    # Walidacja: sprawdź czy kolumny nie są puste
+    if not sequence_column or not label_column:
+        raise ValueError("Both sequence_column and label_column must be provided.")
+    # Walidacja: sprawdź czy kolumny istnieją
+    for col_name in [sequence_column, label_column]:
+        if col_name not in dataframe.columns:
+            raise ValueError(
+                f"Column '{col_name}' not found in DataFrame. Available columns: {list(dataframe.columns)}."
+            )
+
+    # Pobierz sekwencje i labelki
+    sequences = dataframe[sequence_column].tolist()
+    labels = dataframe[label_column].to_numpy().reshape(-1, 1)
+
+    # Lista standardowych aminokwasów w porządku alfabetycznym
+    aa_order = sorted(STANDARD_AMINO_ACIDS)
+
+    # Oblicz skład aminokwasowy dla każdej sekwencji
+    composition_matrix = []
+    for seq in sequences:
+        seq = str(seq).strip().upper()
+        seq_len = len(seq)
+        if seq_len == 0:
+            # Dla pustej sekwencji - same zera
+            composition = [0.0] * 20
+        else:
+            # Zlicz każdy aminokwas i oblicz procentowy udział
+            composition = []
+            for aa in aa_order:
+                count = seq.count(aa)
+                percentage = (count / seq_len) * 100.0
+                composition.append(percentage)
+        composition_matrix.append(composition)
+
+    # Konwertuj do numpy array
+    features = np.array(composition_matrix, dtype=np.float64)
+
+    # Połącz cechy z labelkami: [20 features..., label]
+    vectorized_data = np.hstack([features, labels])
+
+    # Przygotuj info do logów
+    logger.info(
+        "Vectorized %d sequences using Amino Acid Composition (20 features: %s)",
+        len(sequences),
+        ", ".join(aa_order),
+    )
+    logger.info("Feature shape: %s, Final shape: %s", features.shape, vectorized_data.shape)
+    logger.info("First 3 rows of vectorized data:\n%s", vectorized_data[:3])
+    logger.info(
+        "Data statistics - min: %.3f, max: %.3f, mean: %.3f",
+        vectorized_data.min(),
+        vectorized_data.max(),
+        vectorized_data.mean(),
+    )
+    return vectorized_data
 
 
 def vectorize_sequences(dataframe: pd.DataFrame, sequence_column: str, label_column: str) -> np.ndarray:
